@@ -1,0 +1,16 @@
+rootProject.name = "AstraStore"
+
+include(
+        "shared",
+
+        "services:api-gateway",
+        "services:auth-service",
+        "services:upload-service",
+        "services:download-service",
+        "services:metadata-service",
+        "services:placement-service",
+        "services:replication-service",
+        "services:monitoring-service",
+
+        "storage-node"
+)
