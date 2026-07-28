@@ -1,30 +1,46 @@
+// ============================================================
+//  AstraStore — Root build.gradle
+//  Manages all 8 Spring Boot microservices as a Gradle
+//  multi-project build.
+// ============================================================
+
 plugins {
-    id 'java'
+    id 'org.springframework.boot'        version '3.3.5' apply false
+    id 'io.spring.dependency-management' version '1.1.6' apply false
 }
 
 allprojects {
-
-    group = 'com.astrastore'
+    group   = 'com.astrastore'
     version = '1.0.0'
 
     repositories {
         mavenCentral()
     }
-
 }
 
 subprojects {
-
     apply plugin: 'java'
-
     java {
-        toolchain {
-            languageVersion = JavaLanguageVersion.of(21)
-        }
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
+    }
+
+    tasks.withType(JavaCompile).configureEach {
+        options.release = 21
     }
 
     tasks.withType(Test) {
         useJUnitPlatform()
     }
+}
 
+task runAll {
+    group       = 'application'
+    description = 'Boot all 8 AstraStore microservices in parallel'
+
+    def bootRunTasks = subprojects
+            .collect { p -> p.tasks.findByName('bootRun') }
+            .findAll { it != null }
+
+    dependsOn bootRunTasks
 }

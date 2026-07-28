@@ -1,16 +1,21 @@
 rootProject.name = "AstraStore"
 
 include(
-        "shared",
-
-        "services:api-gateway",
-        "services:auth-service",
-        "services:upload-service",
-        "services:download-service",
-        "services:metadata-service",
-        "services:placement-service",
-        "services:replication-service",
-        "services:monitoring-service",
-
-        "storage-node"
+        "api-gateway",
+        "auth",
+        "upload",
+        "download",
+        "metadata",
+        "placement",
+        "replication",
+        "monitoring"
 )
+
+project(":api-gateway").name    = "api-gateway"
+project(":auth").name           = "auth"
+project(":upload").name         = "upload"
+project(":download").name       = "download"
+project(":metadata").name       = "metadata"
+project(":placement").name      = "placement"
+project(":replication").name    = "replication"
+project(":monitoring").name     = "monitoring"

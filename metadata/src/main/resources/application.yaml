@@ -1,0 +1,19 @@
+spring:
+  application:
+    name: metadata-service
+
+server:
+  port: 8084
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    com.astrastore: DEBUG
