@@ -1,0 +1,72 @@
+services:
+  api-gateway:
+    build:
+      context: .
+      args:
+        SERVICE: api-gateway
+    container_name: astrastore-api-gateway
+    ports:
+      - "8080:8080"
+
+  auth:
+    build:
+      context: .
+      args:
+        SERVICE: auth
+    container_name: astrastore-auth
+    ports:
+      - "8081:8081"
+
+  upload:
+    build:
+      context: .
+      args:
+        SERVICE: upload
+    container_name: astrastore-upload
+    ports:
+      - "8082:8082"
+
+  download:
+    build:
+      context: .
+      args:
+        SERVICE: download
+    container_name: astrastore-download
+    ports:
+      - "8083:8083"
+
+  metadata:
+    build:
+      context: .
+      args:
+        SERVICE: metadata
+    container_name: astrastore-metadata
+    ports:
+      - "8084:8084"
+
+  placement:
+    build:
+      context: .
+      args:
+        SERVICE: placement
+    container_name: astrastore-placement
+    ports:
+      - "8085:8085"
+
+  replication:
+    build:
+      context: .
+      args:
+        SERVICE: replication
+    container_name: astrastore-replication
+    ports:
+      - "8086:8086"
+
+  monitoring:
+    build:
+      context: .
+      args:
+        SERVICE: monitoring
+    container_name: astrastore-monitoring
+    ports:
+      - "8087:8087"
