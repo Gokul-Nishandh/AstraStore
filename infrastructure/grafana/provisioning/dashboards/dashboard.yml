@@ -1,0 +1,16 @@
+# ============================================================
+#  Grafana Dashboard Provisioning
+#  Auto-loads pre-configured dashboards on startup
+# ============================================================
+apiVersion: 1
+
+providers:
+  - name: 'AstraStore Dashboards'
+    orgId: 1
+    folder: 'AstraStore'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards

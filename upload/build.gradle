@@ -1,5 +1,10 @@
 // ============================================================
 //  upload — File upload / ingestion service
+//
+//  Responsibilities:
+//    - Accept multipart file uploads (up to 5 GB)
+//    - Forward file to placement service for storage decision
+//    - Produce upload events to Kafka
 // ============================================================
 plugins {
     id 'org.springframework.boot'
@@ -12,10 +17,30 @@ repositories {
     mavenCentral()
 }
 
+ext {
+    set('springCloudVersion', '2023.0.3')
+}
+
+dependencyManagement {
+    imports {
+        mavenBom "org.springframework.cloud:spring-cloud-dependencies:${springCloudVersion}"
+    }
+}
+
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+    // Kafka producer
+    implementation 'org.springframework.kafka:spring-kafka'
+
+    // Micrometer → OpenTelemetry tracing bridge
+    implementation 'io.micrometer:micrometer-tracing-bridge-otel'
+
+    // Micrometer Prometheus
+    implementation 'io.micrometer:micrometer-registry-prometheus'
+
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testRuntimeOnly    'org.junit.platform:junit-platform-launcher'
 }

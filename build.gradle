@@ -1,7 +1,7 @@
 // ============================================================
 //  AstraStore — Root build.gradle
 //  Manages all 8 Spring Boot microservices as a Gradle
-//  multi-project build.
+//  multi-project build, plus shared dependency versions.
 // ============================================================
 
 plugins {
@@ -9,12 +9,19 @@ plugins {
     id 'io.spring.dependency-management' version '1.1.6' apply false
 }
 
+// Shared dependency management
+ext {
+    set('springCloudVersion', '2023.0.3')
+}
+
 allprojects {
-    group   = 'com.astrastore'
+    group = 'com.astrastore'
     version = '1.0.0'
 
     repositories {
         mavenCentral()
+        // Required for opentelemetry-java-instrumentation extensions used by micrometer-tracing
+        maven { url 'https://maven.aliyun.com/repository/public' }
     }
 }
 
@@ -34,6 +41,7 @@ subprojects {
     }
 }
 
+// Custom task: boot all services in parallel
 task runAll {
     group       = 'application'
     description = 'Boot all 8 AstraStore microservices in parallel'

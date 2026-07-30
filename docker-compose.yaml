@@ -1,4 +1,152 @@
+# ============================================================
+#  AstraStore — docker-compose
+#  Full local development stack:
+#    - 8 Spring Boot microservices
+#    - PostgreSQL (metadata + auth persistence)
+#    - Redis (session / cache)
+#    - Kafka + Zookeeper (async event bus)
+#    - Prometheus (metrics)
+#    - Grafana (dashboards)
+#    - Jaeger (distributed tracing)
+# ============================================================
 services:
+
+  # ---------------------------------------------------------------------------
+  # Infrastructure
+  # ---------------------------------------------------------------------------
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: astrastore-postgres
+    environment:
+      POSTGRES_DB: astrastore
+      POSTGRES_USER: astrastore
+      POSTGRES_PASSWORD: astrastore_secret
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U astrastore -d astrastore"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - astrastore
+
+  redis:
+    image: redis:7-alpine
+    container_name: astrastore-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - astrastore
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    container_name: astrastore-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    networks:
+      - astrastore
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: astrastore-kafka
+    depends_on:
+      zookeeper:
+        condition: service_started
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    ports:
+      - "9092:9092"    # internal
+      - "29092:29092"  # external / host
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list"]
+      interval: 20s
+      timeout: 10s
+      retries: 10
+    networks:
+      - astrastore
+
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: astrastore-prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./infrastructure/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - astrastore
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: astrastore-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin123
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: http://localhost:3000
+    volumes:
+      - ./infrastructure/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - astrastore
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.56
+    container_name: astrastore-jaeger
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+      SPAN_STORAGE_TYPE: badger
+      BADGER_EPHEMERAL: "true"
+    ports:
+      - "16686:16686"   # Jaeger UI
+      - "4317:4317"     # OTLP gRPC receiver
+      - "4318:4318"     # OTLP HTTP receiver
+    networks:
+      - astrastore
+
+  # ---------------------------------------------------------------------------
+  # Application Services
+  # ---------------------------------------------------------------------------
+
   api-gateway:
     build:
       context: .
@@ -7,6 +155,20 @@ services:
     container_name: astrastore-api-gateway
     ports:
       - "8080:8080"
+    environment:
+      SPRING_APPLICATION_NAME: api-gateway
+      MANAGEMENT_TRACING_SAMPLING_PROBABILITY: "1.0"
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_ENABLED: "true"
+      MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: always
+      # Jaeger / OpenTelemetry
+      OTEL_SERVICE_NAME: api-gateway
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+      OTEL_METRICS_EXPORTER: none
+    depends_on:
+      - auth
+      - monitoring
+    networks:
+      - astrastore
 
   auth:
     build:
@@ -16,6 +178,31 @@ services:
     container_name: astrastore-auth
     ports:
       - "8081:8081"
+    environment:
+      SPRING_APPLICATION_NAME: auth-service
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/astrastore
+      SPRING_DATASOURCE_USERNAME: astrastore
+      SPRING_DATASOURCE_PASSWORD: astrastore_secret
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_JPA_SHOW_SQL: "false"
+      SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT: org.hibernate.dialect.PostgreSQLDialect
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PORT: "6379"
+      MANAGEMENT_TRACING_SAMPLING_PROBABILITY: "1.0"
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_ENABLED: "true"
+      MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: always
+      OTEL_SERVICE_NAME: auth-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+      OTEL_METRICS_EXPORTER: none
+      # JWT secret — replace with env var in production
+      JWT_SECRET: astrastore_jwt_secret_key_change_in_production_min_256_bits
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - astrastore
 
   upload:
     build:
@@ -25,6 +212,20 @@ services:
     container_name: astrastore-upload
     ports:
       - "8082:8082"
+    environment:
+      SPRING_APPLICATION_NAME: upload-service
+      MANAGEMENT_TRACING_SAMPLING_PROBABILITY: "1.0"
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_ENABLED: "true"
+      MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: always
+      OTEL_SERVICE_NAME: upload-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+      OTEL_METRICS_EXPORTER: none
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - astrastore
 
   download:
     build:
@@ -34,6 +235,20 @@ services:
     container_name: astrastore-download
     ports:
       - "8083:8083"
+    environment:
+      SPRING_APPLICATION_NAME: download-service
+      MANAGEMENT_TRACING_SAMPLING_PROBABILITY: "1.0"
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_ENABLED: "true"
+      MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: always
+      OTEL_SERVICE_NAME: download-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+      OTEL_METRICS_EXPORTER: none
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - astrastore
 
   metadata:
     build:
@@ -43,6 +258,28 @@ services:
     container_name: astrastore-metadata
     ports:
       - "8084:8084"
+    environment:
+      SPRING_APPLICATION_NAME: metadata-service
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/astrastore
+      SPRING_DATASOURCE_USERNAME: astrastore
+      SPRING_DATASOURCE_PASSWORD: astrastore_secret
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_JPA_SHOW_SQL: "false"
+      SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT: org.hibernate.dialect.PostgreSQLDialect
+      MANAGEMENT_TRACING_SAMPLING_PROBABILITY: "1.0"
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_ENABLED: "true"
+      MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: always
+      OTEL_SERVICE_NAME: metadata-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+      OTEL_METRICS_EXPORTER: none
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - astrastore
 
   placement:
     build:
@@ -52,6 +289,20 @@ services:
     container_name: astrastore-placement
     ports:
       - "8085:8085"
+    environment:
+      SPRING_APPLICATION_NAME: placement-service
+      MANAGEMENT_TRACING_SAMPLING_PROBABILITY: "1.0"
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_ENABLED: "true"
+      MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: always
+      OTEL_SERVICE_NAME: placement-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+      OTEL_METRICS_EXPORTER: none
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - astrastore
 
   replication:
     build:
@@ -61,6 +312,20 @@ services:
     container_name: astrastore-replication
     ports:
       - "8086:8086"
+    environment:
+      SPRING_APPLICATION_NAME: replication-service
+      MANAGEMENT_TRACING_SAMPLING_PROBABILITY: "1.0"
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_ENABLED: "true"
+      MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: always
+      OTEL_SERVICE_NAME: replication-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+      OTEL_METRICS_EXPORTER: none
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - astrastore
 
   monitoring:
     build:
@@ -70,3 +335,29 @@ services:
     container_name: astrastore-monitoring
     ports:
       - "8087:8087"
+    environment:
+      SPRING_APPLICATION_NAME: monitoring-service
+      MANAGEMENT_TRACING_SAMPLING_PROBABILITY: "1.0"
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_ENABLED: "true"
+      MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: always
+      OTEL_SERVICE_NAME: monitoring-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+      OTEL_METRICS_EXPORTER: none
+    networks:
+      - astrastore
+
+# ---------------------------------------------------------------------------
+# Networks
+# ---------------------------------------------------------------------------
+networks:
+  astrastore:
+    driver: bridge
+
+# ---------------------------------------------------------------------------
+# Volumes (persist data across `docker compose down`)
+# ---------------------------------------------------------------------------
+volumes:
+  postgres-data:
+  kafka-data:
+  prometheus-data:
+  grafana-data:

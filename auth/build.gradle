@@ -1,3 +1,12 @@
+// ============================================================
+//  auth — Authentication & authorisation service
+//
+//  Responsibilities:
+//    - User registration & login
+//    - JWT token generation & validation
+//    - Role-based access control
+//    - Redis-backed session / token cache
+// ============================================================
 plugins {
     id 'org.springframework.boot'
     id 'io.spring.dependency-management'
@@ -9,14 +18,51 @@ repositories {
     mavenCentral()
 }
 
+ext {
+    set('springCloudVersion', '2023.0.3')
+}
+
+dependencyManagement {
+    imports {
+        mavenBom "org.springframework.cloud:spring-cloud-dependencies:${springCloudVersion}"
+    }
+}
+
 dependencies {
+    // Spring Boot core
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-security'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+    // Lombok — reduces boilerplate (Getter, Builder, etc.)
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+
+    // Persistence
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    runtimeOnly    'org.postgresql:postgresql'
+
+    // Redis (session / token cache)
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+
+    // JWT
+    implementation 'io.jsonwebtoken:jjwt-api:0.12.5'
+    runtimeOnly    'io.jsonwebtoken:jjwt-impl:0.12.5'
+    runtimeOnly    'io.jsonwebtoken:jjwt-jackson:0.12.5'
+
+    // Micrometer → OpenTelemetry tracing bridge (OTEL Java agent handles the rest)
+    implementation 'io.micrometer:micrometer-tracing-bridge-otel'
+
+    // Micrometer Prometheus (shared across all services)
+    implementation 'io.micrometer:micrometer-registry-prometheus'
+
+    // Tests
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.security:spring-security-test'
     testRuntimeOnly    'org.junit.platform:junit-platform-launcher'
+    // H2 in-memory DB for unit/integration tests (Postgres in production)
+    testRuntimeOnly    'com.h2database:h2'
 }
 
 bootRun {

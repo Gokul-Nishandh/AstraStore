@@ -1,5 +1,9 @@
 // ============================================================
 //  download — File download / retrieval service
+//
+//  Responsibilities:
+//    - Stream files back to clients
+//    - Consume Kafka events from upload service
 // ============================================================
 plugins {
     id 'org.springframework.boot'
@@ -12,10 +16,30 @@ repositories {
     mavenCentral()
 }
 
+ext {
+    set('springCloudVersion', '2023.0.3')
+}
+
+dependencyManagement {
+    imports {
+        mavenBom "org.springframework.cloud:spring-cloud-dependencies:${springCloudVersion}"
+    }
+}
+
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+    // Kafka consumer
+    implementation 'org.springframework.kafka:spring-kafka'
+
+    // Micrometer → OpenTelemetry tracing bridge
+    implementation 'io.micrometer:micrometer-tracing-bridge-otel'
+
+    // Micrometer Prometheus
+    implementation 'io.micrometer:micrometer-registry-prometheus'
+
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testRuntimeOnly    'org.junit.platform:junit-platform-launcher'
 }

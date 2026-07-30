@@ -1,0 +1,71 @@
+# ============================================================
+#  Prometheus configuration for AstraStore
+#  Scrapes metrics from all 8 Spring Boot services plus Jaeger
+# ============================================================
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # API Gateway
+  - job_name: 'api-gateway'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['api-gateway:8080']
+    scrape_interval: 10s
+
+  # Auth Service
+  - job_name: 'auth'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['auth:8081']
+    scrape_interval: 10s
+
+  # Upload Service
+  - job_name: 'upload'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['upload:8082']
+    scrape_interval: 10s
+
+  # Download Service
+  - job_name: 'download'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['download:8083']
+    scrape_interval: 10s
+
+  # Metadata Service
+  - job_name: 'metadata'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['metadata:8084']
+    scrape_interval: 10s
+
+  # Placement Service
+  - job_name: 'placement'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['placement:8085']
+    scrape_interval: 10s
+
+  # Replication Service
+  - job_name: 'replication'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['replication:8086']
+    scrape_interval: 10s
+
+  # Monitoring Service
+  - job_name: 'monitoring'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['monitoring:8087']
+    scrape_interval: 10s
+
+  # Jaeger Collector Metrics
+  - job_name: 'jaeger'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['jaeger:14269']
+    scrape_interval: 30s

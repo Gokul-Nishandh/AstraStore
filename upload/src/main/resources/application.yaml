@@ -1,6 +1,11 @@
+# ============================================================
+#  Upload Service — Configuration
+# ============================================================
 spring:
   application:
     name: upload-service
+
+  # Multipart upload configuration (up to 5 GB per file)
   servlet:
     multipart:
       enabled: true
@@ -8,18 +13,46 @@ spring:
       max-request-size: 5GB
       file-size-threshold: 2KB
 
+  # Kafka producer
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      retries: 3
+      properties:
+        enable.idempotence: true
+
 server:
   port: 8082
 
+# Actuator & Observability
 management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus
   endpoint:
     health:
       show-details: always
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+  tracing:
+    sampling:
+      probability: ${MANAGEMENT_TRACING_SAMPLING_PROBABILITY:1.0}
+
+# OTEL / Jaeger
+otel:
+  exporter:
+    otlp:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4317}
+  service:
+    name: ${OTEL_SERVICE_NAME:upload-service}
 
 logging:
   level:
     com.astrastore: DEBUG
+    org.springframework.kafka: INFO

@@ -1,10 +1,25 @@
+# ============================================================
+#  Monitoring Service — Configuration
+# ============================================================
 spring:
   application:
     name: monitoring-service
 
+  # Kafka consumer for receiving metrics/alert events
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: monitoring-service
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      auto-offset-reset: earliest
+      properties:
+        spring.json.trusted.packages: "*"
+
 server:
   port: 8087
 
+# Actuator & Observability
 management:
   endpoints:
     web:
@@ -13,13 +28,28 @@ management:
   endpoint:
     health:
       show-details: always
-    prometheus:
-      enabled: true
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+  tracing:
+    sampling:
+      probability: ${MANAGEMENT_TRACING_SAMPLING_PROBABILITY:1.0}
+  # Histogram buckets for HTTP request latency
   metrics:
     distribution:
       percentiles-histogram:
         http.server.requests: true
 
+# OTEL / Jaeger
+otel:
+  exporter:
+    otlp:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4317}
+  service:
+    name: ${OTEL_SERVICE_NAME:monitoring-service}
+
 logging:
   level:
     com.astrastore: DEBUG
+    org.springframework.kafka: INFO

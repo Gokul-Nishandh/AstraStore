@@ -1,24 +1,73 @@
+# ============================================================
+#  Auth Service — Configuration
+# ============================================================
 spring:
   application:
     name: auth-service
-  security:
-    user:
-      name: admin
-      password: admin123
+
+  # PostgreSQL datasource — override with env vars in docker-compose
+  datasource:
+    url: jdbc:postgresql://${SPRING_DATASOURCE_HOST:localhost}:${SPRING_DATASOURCE_PORT:5432}/astrastore
+    username: ${SPRING_DATASOURCE_USERNAME:astrastore}
+    password: ${SPRING_DATASOURCE_PASSWORD:astrastore_secret}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+      idle-timeout: 300000
+      connection-timeout: 20000
+
+  jpa:
+    hibernate:
+      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:update}
+    show-sql: ${SPRING_JPA_SHOW_SQL:false}
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+
+  # Redis — override with env vars in docker-compose
+  data:
+    redis:
+      host: ${SPRING_REDIS_HOST:localhost}
+      port: ${SPRING_REDIS_PORT:6379}
+      timeout: 2000ms
 
 server:
   port: 8081
 
+# JWT configuration
+jwt:
+  secret: ${JWT_SECRET:astrastore_jwt_secret_key_change_in_production_min_256_bits}
+  expiration-ms: 86400000  # 24 hours
+
+# Actuator & Observability
 management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus
   endpoint:
     health:
       show-details: always
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+  tracing:
+    sampling:
+      probability: ${MANAGEMENT_TRACING_SAMPLING_PROBABILITY:1.0}
+
+# OTEL / Jaeger — configure endpoint via env var OTEL_EXPORTER_OTLP_ENDPOINT
+otel:
+  exporter:
+    otlp:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4317}
+  service:
+    name: ${OTEL_SERVICE_NAME:auth-service}
 
 logging:
   level:
     com.astrastore: DEBUG
     org.springframework.security: INFO
+    org.hibernate.SQL: WARN
