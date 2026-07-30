@@ -150,7 +150,6 @@ services:
       MANAGEMENT_TRACING_SAMPLING_PROBABILITY: "1.0"
       MANAGEMENT_PROMETHEUS_METRICS_EXPORT_ENABLED: "true"
       MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: always
-      # Jaeger / OpenTelemetry
       OTEL_SERVICE_NAME: api-gateway
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
       OTEL_METRICS_EXPORTER: none
@@ -184,7 +183,6 @@ services:
       OTEL_SERVICE_NAME: auth-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
       OTEL_METRICS_EXPORTER: none
-      # JWT secret — replace with env var in production
       JWT_SECRET: astrastore_jwt_secret_key_change_in_production_min_256_bits
     depends_on:
       postgres:
