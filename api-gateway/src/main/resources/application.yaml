@@ -10,50 +10,48 @@ spring:
           uri: http://auth:8081
           predicates:
             - Path=/api/auth/**
-          filters:
-            - StripPrefix=1
         # Upload
         - id: upload-route
           uri: http://upload:8082
           predicates:
             - Path=/api/upload/**
           filters:
-            - StripPrefix=1
+            - RewritePath=/api/upload/(?<segment>.*), /$\{segment}
         # Download
         - id: download-route
           uri: http://download:8083
           predicates:
             - Path=/api/download/**
           filters:
-            - StripPrefix=1
+            - RewritePath=/api/download/(?<segment>.*), /$\{segment}
         # Metadata
         - id: metadata-route
           uri: http://metadata:8084
           predicates:
             - Path=/api/metadata/**
           filters:
-            - StripPrefix=1
+            - RewritePath=/api/metadata/(?<segment>.*), /$\{segment}
         # Placement
         - id: placement-route
           uri: http://placement:8085
           predicates:
             - Path=/api/placement/**
           filters:
-            - StripPrefix=1
+            - RewritePath=/api/placement/(?<segment>.*), /$\{segment}
         # Replication
         - id: replication-route
           uri: http://replication:8086
           predicates:
             - Path=/api/replication/**
           filters:
-            - StripPrefix=1
+            - RewritePath=/api/replication/(?<segment>.*), /$\{segment}
         # Monitoring
         - id: monitoring-route
           uri: http://monitoring:8087
           predicates:
             - Path=/api/monitoring/**
           filters:
-            - StripPrefix=1
+            - RewritePath=/api/monitoring/(?<segment>.*), /$\{segment}
 
       # Enable HTTP request metrics for Prometheus
       metrics:
