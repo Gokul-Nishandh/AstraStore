@@ -1,0 +1,38 @@
+# ============================================================
+#  Storage Node Service — Configuration
+# ============================================================
+spring:
+  application:
+    name: storage-node
+
+server:
+  port: 8088
+
+# Actuator & Observability
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: always
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+  tracing:
+    sampling:
+      probability: ${MANAGEMENT_TRACING_SAMPLING_PROBABILITY:1.0}
+
+# OTEL / Jaeger
+otel:
+  exporter:
+    otlp:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4317}
+  service:
+    name: ${OTEL_SERVICE_NAME:storage-node}
+
+logging:
+  level:
+    com.astrastore: DEBUG

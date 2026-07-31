@@ -8,7 +8,8 @@ include(
         "metadata",
         "placement",
         "replication",
-        "monitoring"
+        "monitoring",
+        "storage-node"
 )
 
 project(":api-gateway").name    = "api-gateway"
@@ -19,3 +20,4 @@ project(":metadata").name       = "metadata"
 project(":placement").name      = "placement"
 project(":replication").name    = "replication"
 project(":monitoring").name     = "monitoring"
+project(":storage-node").name    = "storage-node"

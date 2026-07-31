@@ -1,0 +1,50 @@
+// ============================================================
+//  storage-node — Chunk storage service
+//
+//  Responsibilities:
+//    - Store and retrieve binary chunks
+//    - Hash-based directory fan-out (256 subdirectories 00-ff)
+//    - Zero-copy streaming for efficient data transfer
+// ============================================================
+plugins {
+    id 'org.springframework.boot'
+    id 'io.spring.dependency-management'
+}
+
+description = 'AstraStore Storage Node'
+
+repositories {
+    mavenCentral()
+}
+
+ext {
+    set('springCloudVersion', '2023.0.3')
+}
+
+dependencyManagement {
+    imports {
+        mavenBom "org.springframework.cloud:spring-cloud-dependencies:${springCloudVersion}"
+    }
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+
+    // Lombok — reduces boilerplate (Getter, Builder, etc.)
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+
+    // Micrometer Prometheus
+    implementation 'io.micrometer:micrometer-registry-prometheus'
+
+    // Micrometer → OpenTelemetry tracing bridge
+    implementation 'io.micrometer:micrometer-tracing-bridge-otel'
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testRuntimeOnly    'org.junit.platform:junit-platform-launcher'
+}
+
+bootRun {
+    args = ['--spring.profiles.active=local']
+}

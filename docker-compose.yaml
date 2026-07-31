@@ -2,6 +2,7 @@
 #  AstraStore — docker-compose
 #  Full local development stack:
 #    - 8 Spring Boot microservices
+#    - 3 Storage Node agents (chunk storage)
 #    - PostgreSQL (metadata + auth persistence)
 #    - Redis (session / cache)
 #    - Apache Kafka in KRaft mode (no Zookeeper) (async event bus)
@@ -334,6 +335,68 @@ services:
     networks:
       - astrastore
 
+  # ---------------------------------------------------------------------------
+  # Storage Nodes (chunk storage agents)
+  # ---------------------------------------------------------------------------
+  # NOTE: Storage nodes are internal-only (not exposed via API Gateway).
+  # They are accessed directly by Upload, Download, and Replication services
+  # via Docker DNS (e.g., http://storage-node-1:8088).
+  # Storage nodes are stateless and do NOT depend on postgres/redis.
+
+  storage-node-1:
+    build:
+      context: .
+      args:
+        SERVICE: storage-node
+    container_name: astrastore-storage-node-1
+    ports:
+      - "8088:8088"
+    volumes:
+      - storage-node-1-data:/data/storage
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8088/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - astrastore
+
+  storage-node-2:
+    build:
+      context: .
+      args:
+        SERVICE: storage-node
+    container_name: astrastore-storage-node-2
+    ports:
+      - "8089:8088"
+    volumes:
+      - storage-node-2-data:/data/storage
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8088/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - astrastore
+
+  storage-node-3:
+    build:
+      context: .
+      args:
+        SERVICE: storage-node
+    container_name: astrastore-storage-node-3
+    ports:
+      - "8090:8088"
+    volumes:
+      - storage-node-3-data:/data/storage
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8088/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - astrastore
+
 # ---------------------------------------------------------------------------
 # Networks
 # ---------------------------------------------------------------------------
@@ -349,3 +412,6 @@ volumes:
   kafka-data:
   prometheus-data:
   grafana-data:
+  storage-node-1-data:
+  storage-node-2-data:
+  storage-node-3-data:
