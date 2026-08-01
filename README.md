@@ -4,6 +4,105 @@ A production-grade distributed storage system inspired by Amazon S3, implementin
 
 ---
 
+## 🏗️ Architecture
+
+```
+                                    ┌─────────────────┐
+                                    │     Client       │
+                                    └────────┬────────┘
+                                             │
+                                             ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│                         API Gateway (:8080)                            │
+│                    Request Routing │ Load Balancing                    │
+└────────────────────────────────┬───────────────────────────────────────┘
+                                 │
+         ┌────────────────────────┼────────────────────────┐
+         │                        │                        │
+         ▼                        ▼                        ▼
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│ Upload Service   │    │Download Service │    │  Auth Service   │
+│   (:8082)       │    │    (:8083)      │    │    (:8081)      │
+│                 │    │                 │    │                 │
+│ Zero-Memory     │    │ Reassembly      │    │ JWT Generation  │
+│ Streaming       │    │ Orchestrator    │    │ & Validation    │
+│ Chunker         │    │                 │    │                 │
+└────────┬────────┘    └─────────────────┘    └─────────────────┘
+         │
+         │ HTTP POST (8KB Buffer)
+         ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│                    Storage Node Agent  (x3 instances)                    │
+│  ┌──────────────────────────────────────────────────────────────────┐  │
+│  │  Ports: 8088 │ 8089 │ 8090                                        │  │
+│  │                                                                  │  │
+│  │  POST /api/v1/chunks/{id}    → Atomic write (temp → fsync → move) │  │
+│  │  GET  /api/v1/chunks/{id}    → Stream from disk                  │  │
+│  │  DELETE /api/v1/chunks/{id}  → Remove chunk file                 │  │
+│  │  GET  /api/v1/health         → Heartbeat + disk status          │  │
+│  │                                                                  │  │
+│  │  Directory Fan-out: /data/chunks/00/ff/xxxxxx (256 hex dirs)     │  │
+│  └──────────────────────────────────────────────────────────────────┘  │
+└────────────────────────────────┬───────────────────────────────────────┘
+                                 │
+                                 ▼
+                    ┌────────────────────────┐
+                    │   Kafka KRaft Cluster  │
+                    │  Topic: astrastore.    │
+                    │       chunks.written    │
+                    └───────────┬────────────┘
+                                │
+                                ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│                    Replication Service (:8086)                          │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────────────┐ │
+│  │ Kafka Listener   │  │ P2P Push Client │  │ Self-Healing Engine    │ │
+│  │                 │──│                 │  │                        │ │
+│  │ Consumes        │  │ Exponential     │  │ • UnderReplication     │ │
+│  │ ChunkWritten     │  │ Backoff         │  │   Scanner (@60s)       │ │
+│  │ Events          │  │ (1s→2s→4s)      │  │ • RepairRateLimiter   │ │
+│  │                 │  │                 │  │   (2 chunks/sec)       │ │
+│  │                 │  │ Semaphore:      │  │ • RecoveryPublisher   │ │
+│  │                 │  │ Max 10/node     │  │                        │ │
+│  └─────────────────┘  └────────┬────────┘  └─────────────────────────┘ │
+└─────────────────────────────────┼──────────────────────────────────────┘
+                                  │ P2P HTTP Streaming
+        ┌─────────────────────────┼─────────────────────────┐
+        ▼                         ▼                         ▼
+┌─────────────┐           ┌─────────────┐           ┌─────────────┐
+│ Storage     │           │ Storage     │           │ Storage     │
+│ Node 1      │           │ Node 2      │           │ Node 3      │
+│ (:8088)     │           │ (:8089)     │           │ (:8090)     │
+│             │◄──────────│             │◄──────────│             │
+│ 1 Primary   │  Replica  │ 1 Replica   │  Replica  │ 1 Replica   │
+│ 2 Replicas  │  Push     │ 2 Replicas  │  Push     │ 2 Replicas  │
+└─────────────┘           └─────────────┘           └─────────────┘
+```
+
+---
+
+## 👥 Team
+
+| Name | Role | Module |
+|------|------|--------|
+| **Pranav Surya** | Data Flow Lead | Module 1: Metadata Engine & Gateway |
+| **Gokul Nishandh** | System State Lead | Module 2: Placement & Cluster Health |
+| **B T Senthan Amuthan** | Infrastructure Lead | Module 3: Distributed Storage Engine |
+| **Pranaav A** | Security & DX Lead | Module 4: Auth, SDKs & Monitoring |
+
+---
+
+## 📦 Module Breakdown
+
+| Module | Owner | Description |
+|--------|-------|-------------|
+| **Module 1: Metadata Engine & Gateway** | Pranav Surya | PostgreSQL schema, Upload/Download Orchestrator, API Gateway |
+| **Module 2: Placement & Cluster Health** | Gokul Nishandh | Placement Strategy, Node Health State Machine, Monitoring |
+| **Module 3: Distributed Storage Engine** | B T Senthan Amuthan | Zero-Memory Chunker, Storage Node Agent, Replication, Self-Healing |
+| **Module 4: Auth, SDKs & Monitoring** | Pranaav A | Auth Service, Client SDKs, Monitoring Dashboard |
+
+---
+
 ## 🌟 Features
 
 - **Zero-Memory Streaming** — O(1) memory footprint using 8KB fixed buffer, handles files of any size
@@ -13,76 +112,6 @@ A production-grade distributed storage system inspired by Amazon S3, implementin
 - **Self-Healing** — Automatic detection and repair of under-replicated chunks
 - **Exponential Backoff** — Network resilience with retry logic (1s → 2s → 4s)
 - **Concurrency Limits** — Semaphore-based throttling (10 concurrent streams per node)
-
----
-
-## 🏗️ Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                          API Gateway (:8080)                         │
-└─────────────────────────┬───────────────────────────────────────────┘
-                          │
-          ┌───────────────┼───────────────┐
-          ▼               ▼               ▼
-    ┌──────────┐   ┌──────────┐   ┌──────────┐
-    │  Upload  │   │ Download │   │   Auth   │
-    │ (:8082)  │   │ (:8083) │   │ (:8081) │
-    └────┬─────┘   └──────────┘   └──────────┘
-         │
-         │ HTTP Streaming (8KB buffer)
-         ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                 Storage Node 1  (:8088)                              │
-│  ┌──────────────────────────────────────────────────────────────┐   │
-│  │  POST /chunks/{id}  │  Atomic write → fsync → move          │   │
-│  │  GET  /chunks/{id}  │  Hex fan-out (00-ff directories)     │   │
-│  │  GET  /health       │  Disk capacity + status               │   │
-│  └──────────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────┘
-         │
-         │ Kafka: astrastore.chunks.written
-         ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│               Replication Service (:8086)                            │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────────┐  │
-│  │  Kafka      │  │  P2P Push   │  │  Self-Healing Engine       │  │
-│  │  Listener   │──│  Client     │  │  • UnderReplicationScanner  │  │
-│  │             │  │  (exponential│  │  • RepairRateLimiter (2/s) │  │
-│  │             │  │   backoff)  │  │  • RecoveryPublisher       │  │
-│  └─────────────┘  └──────┬──────┘  └─────────────────────────────┘  │
-└──────────────────────────┼──────────────────────────────────────────┘
-                           │ P2P Streaming
-         ┌─────────────────┼─────────────────┐
-         ▼                 ▼                 ▼
-   ┌──────────┐     ┌──────────┐     ┌──────────┐
-   │ Storage  │     │ Storage  │     │ Storage  │
-   │ Node 2   │     │ Node 3   │     │ Node 1   │
-   │ (:8089)  │     │ (:8090)  │     │ (:8088)  │
-   └──────────┘     └──────────┘     └──────────┘
-```
-
----
-
-## 👥 Team
-
-| Name | Role | Module |
-|------|------|--------|
-| **B T Senthan Amuthan** | Infrastructure Lead | Module 3: Distributed Storage Engine |
-| **Pranaav A** | Security & DX Lead | Module 4: Auth, SDKs & Monitoring |
-| **Pranav Surya** | Data Flow Lead | Module 1: Metadata Engine & Gateway |
-| **Gokul Nishandh** | System State Lead | Module 2: Placement & Cluster Health |
-
----
-
-## 📦 Module Breakdown
-
-| Module | Owner | Description |
-|--------|-------|-------------|
-| **Module 1: Metadata Engine** | Pranav Surya | PostgreSQL schema, Upload/Download Orchestrator, API Gateway |
-| **Module 2: Placement & Health** | Gokul Nishandh | Placement Strategy, Node Health State Machine, Monitoring |
-| **Module 3: Storage Engine** | B T Senthan Amuthan | Zero-Memory Chunker, Storage Node Agent, Replication, Self-Healing |
-| **Module 4: Auth & DX** | Pranaav A | Auth Service, Client SDKs, Monitoring Dashboard |
 
 ---
 
@@ -116,9 +145,9 @@ docker compose ps
 
 # Health checks
 curl http://localhost:8080/actuator/health   # API Gateway
-curl http://localhost:8081/actuator/health  # Auth
-curl http://localhost:8082/actuator/health  # Upload
-curl http://localhost:8086/actuator/health  # Replication
+curl http://localhost:8081/actuator/health   # Auth
+curl http://localhost:8082/actuator/health   # Upload
+curl http://localhost:8086/actuator/health   # Replication
 curl http://localhost:8088/api/v1/health/heartbeat   # Storage Node 1
 curl http://localhost:8089/api/v1/health/heartbeat   # Storage Node 2
 curl http://localhost:8090/api/v1/health/heartbeat   # Storage Node 3
@@ -267,9 +296,3 @@ This project demonstrates:
 | Exponential backoff | Amazon, Google | 1s → 2s → 4s with jitter |
 | Atomic file I/O | Databases, firmware | fsync + atomic move |
 | Event-driven architecture | LinkedIn, Netflix | Kafka-based async replication |
-
----
-
-## 📄 License
-
-MIT License - See LICENSE file for details.
