@@ -25,58 +25,41 @@ public class ChunkStorageService {
     private final AtomicFileWriter atomicFileWriter;
 
     /**
-     * Stores a chunk after verifying its SHA-256 hash.
-     * Buffers the entire stream to enable both hash computation and writing.
+     * Stores a chunk and computes its SHA-256 checksum.
+     * The checksum is calculated during the write and returned in the response.
      *
-     * @param chunkId      the unique chunk identifier
-     * @param stream       the chunk data
-     * @param expectedHash the expected SHA-256 hash
-     * @return true if stored successfully, false if hash mismatch or chunk exists
-     * @throws IOException if storage fails
+     * @param chunkId the unique chunk identifier
+     * @param stream  the chunk data
+     * @return the computed SHA-256 checksum as a hexadecimal string
+     * @throws IOException if storage fails or chunk already exists
      */
-    /**
-     * Stores a chunk after verifying its SHA-256 hash.
-     * Buffers the entire stream to enable both hash computation and writing.
-     *
-     * @param chunkId      the unique chunk identifier
-     * @param stream       the chunk data
-     * @param expectedHash the expected SHA-256 hash
-     * @return true if stored successfully, false if hash mismatch or chunk exists
-     * @throws IOException if storage fails
-     */
-    public boolean storeChunk(String chunkId, InputStream stream, String expectedHash) throws IOException {
+    public String storeChunk(String chunkId, InputStream stream) throws IOException {
         byte[] data = stream.readAllBytes();
-        return storeChunk(chunkId, data, expectedHash);
+        return storeChunk(chunkId, data);
     }
 
     /**
-     * Stores a chunk after verifying its SHA-256 hash.
+     * Stores a chunk and computes its SHA-256 checksum.
      *
-     * @param chunkId      the unique chunk identifier
-     * @param data        the chunk data as byte array
-     * @param expectedHash the expected SHA-256 hash
-     * @return true if stored successfully, false if hash mismatch or chunk exists
-     * @throws IOException if storage fails
+     * @param chunkId the unique chunk identifier
+     * @param data    the chunk data as byte array
+     * @return the computed SHA-256 checksum as a hexadecimal string
+     * @throws IOException if storage fails or chunk already exists
      */
-    public boolean storeChunk(String chunkId, byte[] data, String expectedHash) throws IOException {
+    public String storeChunk(String chunkId, byte[] data) throws IOException {
         Path finalPath = storageConfig.getFinalPath(chunkId);
 
         if (Files.exists(finalPath)) {
-            log.warn("Chunk already exists — chunkId={}", chunkId);
-            return false;
+            throw new IOException("Chunk already exists: " + chunkId);
         }
 
-        String computedHash = hashService.computeSha256(data);
-
-        if (!hashService.verifyHash(computedHash, expectedHash)) {
-            log.warn("Hash mismatch — chunkId={}, expected={}, computed={}",
-                    chunkId, expectedHash, computedHash);
-            return false;
-        }
-
+        String checksum = hashService.computeSha256(data);
         atomicFileWriter.writeAtomic(new ByteArrayInputStream(data), finalPath);
-        log.info("Chunk stored — chunkId={}, size={}", chunkId, Files.size(finalPath));
-        return true;
+
+        long size = Files.size(finalPath);
+        log.info("Chunk stored — chunkId={}, checksum={}, size={}", chunkId, checksum, size);
+
+        return checksum;
     }
 
     /**
