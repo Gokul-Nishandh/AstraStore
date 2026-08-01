@@ -32,6 +32,9 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
 
+    // Guava RateLimiter
+    implementation 'com.google.guava:guava:33.4.0-jre'
+
     // Kafka consumer + producer
     implementation 'org.springframework.kafka:spring-kafka'
 
