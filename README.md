@@ -1,111 +1,103 @@
-# AstraStore - Distributed Storage Engine
+# AstraStore
+
+**Distributed Storage Engine**
 
 A production-grade distributed storage system inspired by Amazon S3, implementing zero-memory streaming, P2P replication, and self-healing data repair mechanisms.
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
+```mermaid
+flowchart TB
+    Client([Client])
+
+    subgraph Gateway["API Gateway — :8080"]
+        GW[Request Routing · Load Balancing]
+    end
+
+    subgraph Services["Core Services"]
+        direction LR
+        Upload["Upload Service — :8082\nZero-Memory Streaming Chunker"]
+        Download["Download Service — :8083\nReassembly Orchestrator"]
+        Auth["Auth Service — :8081\nJWT Generation & Validation"]
+    end
+
+    subgraph Nodes["Storage Node Agents (x3)"]
+        direction LR
+        N1["Node 1 — :8088"]
+        N2["Node 2 — :8089"]
+        N3["Node 3 — :8090"]
+    end
+
+    Kafka{{"Kafka KRaft Cluster\nastrastore.chunks.written"}}
+
+    subgraph Repl["Replication Service — :8086"]
+        direction LR
+        Listener["Kafka Listener"]
+        P2P["P2P Push Client\nExponential Backoff · Semaphore(10/node)"]
+        Heal["Self-Healing Engine\nScanner @60s · Rate Limiter 2/sec"]
+    end
+
+    Client --> GW
+    GW --> Upload
+    GW --> Download
+    GW --> Auth
+
+    Upload -->|"HTTP POST · 8KB Buffer"| N1
+    Upload --> N2
+    Upload --> N3
+
+    N1 --> Kafka
+    N2 --> Kafka
+    N3 --> Kafka
+
+    Kafka --> Listener
+    Listener --> P2P
+    Listener -.-> Heal
+    Heal -.-> Listener
+
+    P2P -->|P2P HTTP Streaming| N1
+    P2P --> N2
+    P2P --> N3
 ```
-                                    ┌─────────────────┐
-                                    │     Client       │
-                                    └────────┬────────┘
-                                             │
-                                             ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                         API Gateway (:8080)                            │
-│                    Request Routing │ Load Balancing                    │
-└────────────────────────────────┬───────────────────────────────────────┘
-                                 │
-         ┌────────────────────────┼────────────────────────┐
-         │                        │                        │
-         ▼                        ▼                        ▼
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│ Upload Service   │    │Download Service │    │  Auth Service   │
-│   (:8082)       │    │    (:8083)      │    │    (:8081)      │
-│                 │    │                 │    │                 │
-│ Zero-Memory     │    │ Reassembly      │    │ JWT Generation  │
-│ Streaming       │    │ Orchestrator    │    │ & Validation    │
-│ Chunker         │    │                 │    │                 │
-└────────┬────────┘    └─────────────────┘    └─────────────────┘
-         │
-         │ HTTP POST (8KB Buffer)
-         ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                    Storage Node Agent  (x3 instances)                    │
-│  ┌──────────────────────────────────────────────────────────────────┐  │
-│  │  Ports: 8088 │ 8089 │ 8090                                        │  │
-│  │                                                                  │  │
-│  │  POST /api/v1/chunks/{id}    → Atomic write (temp → fsync → move) │  │
-│  │  GET  /api/v1/chunks/{id}    → Stream from disk                  │  │
-│  │  DELETE /api/v1/chunks/{id}  → Remove chunk file                 │  │
-│  │  GET  /api/v1/health         → Heartbeat + disk status          │  │
-│  │                                                                  │  │
-│  │  Directory Fan-out: /data/chunks/00/ff/xxxxxx (256 hex dirs)     │  │
-│  └──────────────────────────────────────────────────────────────────┘  │
-└────────────────────────────────┬───────────────────────────────────────┘
-                                 │
-                                 ▼
-                    ┌────────────────────────┐
-                    │   Kafka KRaft Cluster  │
-                    │  Topic: astrastore.    │
-                    │       chunks.written    │
-                    └───────────┬────────────┘
-                                │
-                                ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                    Replication Service (:8086)                          │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────────────┐ │
-│  │ Kafka Listener   │  │ P2P Push Client │  │ Self-Healing Engine    │ │
-│  │                 │──│                 │  │                        │ │
-│  │ Consumes        │  │ Exponential     │  │ • UnderReplication     │ │
-│  │ ChunkWritten     │  │ Backoff         │  │   Scanner (@60s)       │ │
-│  │ Events          │  │ (1s→2s→4s)      │  │ • RepairRateLimiter   │ │
-│  │                 │  │                 │  │   (2 chunks/sec)       │ │
-│  │                 │  │ Semaphore:      │  │ • RecoveryPublisher   │ │
-│  │                 │  │ Max 10/node     │  │                        │ │
-│  └─────────────────┘  └────────┬────────┘  └─────────────────────────┘ │
-└─────────────────────────────────┼──────────────────────────────────────┘
-                                  │ P2P HTTP Streaming
-        ┌─────────────────────────┼─────────────────────────┐
-        ▼                         ▼                         ▼
-┌─────────────┐           ┌─────────────┐           ┌─────────────┐
-│ Storage     │           │ Storage     │           │ Storage     │
-│ Node 1      │           │ Node 2      │           │ Node 3      │
-│ (:8088)     │           │ (:8089)     │           │ (:8090)     │
-│             │◄──────────│             │◄──────────│             │
-│ 1 Primary   │  Replica  │ 1 Replica   │  Replica  │ 1 Replica   │
-│ 2 Replicas  │  Push     │ 2 Replicas  │  Push     │ 2 Replicas  │
-└─────────────┘           └─────────────┘           └─────────────┘
-```
+
+Each storage node holds one primary chunk and two replicas, distributed round-robin across the cluster. Chunk files are stored on disk using a 256-way hex directory fan-out (`/data/chunks/00/ff/xxxxxx`).
+
+### Storage Node API
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/v1/chunks/{id}` | Atomic write (temp → fsync → move) |
+| `GET` | `/api/v1/chunks/{id}` | Stream chunk from disk |
+| `DELETE` | `/api/v1/chunks/{id}` | Remove chunk file |
+| `GET` | `/api/v1/health` | Heartbeat + disk status |
 
 ---
 
-## 👥 Team
+## Team
 
 | Name | Role | Module |
-|------|------|--------|
-| **Pranav Surya** | Data Flow Lead | Module 1: Metadata Engine & Gateway |
-| **Gokul Nishandh** | System State Lead | Module 2: Placement & Cluster Health |
-| **B T Senthan Amuthan** | Infrastructure Lead | Module 3: Distributed Storage Engine |
-| **Pranaav A** | Security & DX Lead | Module 4: Auth, SDKs & Monitoring |
+|---|---|---|
+| Pranav Surya | Data Flow Lead | Module 1 — Metadata Engine & Gateway |
+| Gokul Nishandh | System State Lead | Module 2 — Placement & Cluster Health |
+| B T Senthan Amuthan | Infrastructure Lead | Module 3 — Distributed Storage Engine |
+| Pranaav A | Security & DX Lead | Module 4 — Auth, SDKs & Monitoring |
 
----
-
-## 📦 Module Breakdown
+## Module Breakdown
 
 | Module | Owner | Description |
-|--------|-------|-------------|
-| **Module 1: Metadata Engine & Gateway** | Pranav Surya | PostgreSQL schema, Upload/Download Orchestrator, API Gateway |
-| **Module 2: Placement & Cluster Health** | Gokul Nishandh | Placement Strategy, Node Health State Machine, Monitoring |
-| **Module 3: Distributed Storage Engine** | B T Senthan Amuthan | Zero-Memory Chunker, Storage Node Agent, Replication, Self-Healing |
-| **Module 4: Auth, SDKs & Monitoring** | Pranaav A | Auth Service, Client SDKs, Monitoring Dashboard |
+|---|---|---|
+| Module 1: Metadata Engine & Gateway | Pranav Surya | PostgreSQL schema, Upload/Download Orchestrator, API Gateway |
+| Module 2: Placement & Cluster Health | Gokul Nishandh | Placement Strategy, Node Health State Machine, Monitoring |
+| Module 3: Distributed Storage Engine | B T Senthan Amuthan | Zero-Memory Chunker, Storage Node Agent, Replication, Self-Healing |
+| Module 4: Auth, SDKs & Monitoring | Pranaav A | Auth Service, Client SDKs, Monitoring Dashboard |
 
 ---
 
-## 🌟 Features
+## Features
 
-- **Zero-Memory Streaming** — O(1) memory footprint using 8KB fixed buffer, handles files of any size
+- **Zero-Memory Streaming** — O(1) memory footprint using an 8KB fixed buffer, handles files of any size
 - **Dual SHA-256 Digests** — Per-chunk and whole-object hashing without staging to disk
 - **Atomic Writes** — Temp file → fsync → atomic move for crash-safe storage
 - **P2P Replication** — Direct node-to-node streaming with Kafka coordination
@@ -115,7 +107,7 @@ A production-grade distributed storage system inspired by Amazon S3, implementin
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -155,7 +147,7 @@ curl http://localhost:8090/api/v1/health/heartbeat   # Storage Node 3
 
 ---
 
-## 🧪 Testing APIs
+## Testing APIs
 
 ### Upload a File
 
@@ -229,7 +221,7 @@ curl -X POST http://localhost:8081/api/auth/login \
 
 ---
 
-## 🔑 Key Technical Decisions
+## Key Technical Decisions
 
 ### Zero-Memory Streaming
 
@@ -258,38 +250,32 @@ Files.move(tempPath, finalPath, StandardCopyOption.ATOMIC_MOVE);
 
 ### Self-Healing Loop
 
-```
-UnderReplicationScanner (every 60s)
-         ↓
-MockChunkDatabase.findUnderReplicated()
-         ↓
-RepairRateLimiter.throttle(2/sec)
-         ↓
-RecoveryPublisher → Kafka (ChunkWrittenEvent)
-         ↓
-KafkaChunkListener → ReplicationOrchestrator
-         ↓
-P2P Push to target nodes
-         ↓
-MockMetadataClient → MockChunkDatabase (updated)
+```mermaid
+flowchart LR
+    A["UnderReplicationScanner\n(every 60s)"] --> B["MockChunkDatabase\n.findUnderReplicated()"]
+    B --> C["RepairRateLimiter\n.throttle(2/sec)"]
+    C --> D["RecoveryPublisher\n→ Kafka (ChunkWrittenEvent)"]
+    D --> E["KafkaChunkListener\n→ ReplicationOrchestrator"]
+    E --> F["P2P Push\nto target nodes"]
+    F --> G["MockMetadataClient\n→ MockChunkDatabase (updated)"]
 ```
 
 ---
 
-## 📊 Kafka Topics
+## Kafka Topics
 
 | Topic | Producer | Consumer | Purpose |
-|-------|----------|----------|---------|
+|---|---|---|---|
 | `astrastore.chunks.written` | Upload Service, Recovery Publisher | Replication Service | Trigger P2P replication |
 
 ---
 
-## 🎯 Interview Impact
+## Interview Impact
 
 This project demonstrates:
 
 | Concept | Company Focus | Implementation |
-|---------|---------------|----------------|
+|---|---|---|
 | Zero-copy streaming | Amazon S3, Stripe | 8KB buffer, O(1) memory |
 | Distributed replication | DynamoDB, Cassandra | P2P with Kafka coordination |
 | Self-healing | AWS, Azure | 60s scanner + rate limiter |
