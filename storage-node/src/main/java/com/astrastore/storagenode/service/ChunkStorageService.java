@@ -50,7 +50,8 @@ public class ChunkStorageService {
         Path finalPath = storageConfig.getFinalPath(chunkId);
 
         if (Files.exists(finalPath)) {
-            throw new IOException("Chunk already exists: " + chunkId);
+            log.info("Chunk already exists (idempotent) — chunkId={}", chunkId);
+            return hashService.computeSha256(data);
         }
 
         String checksum = hashService.computeSha256(data);
