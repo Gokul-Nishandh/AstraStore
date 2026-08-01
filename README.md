@@ -261,24 +261,3 @@ flowchart LR
 ```
 
 ---
-
-## Kafka Topics
-
-| Topic | Producer | Consumer | Purpose |
-|---|---|---|---|
-| `astrastore.chunks.written` | Upload Service, Recovery Publisher | Replication Service | Trigger P2P replication |
-
----
-
-## Interview Impact
-
-This project demonstrates:
-
-| Concept | Company Focus | Implementation |
-|---|---|---|
-| Zero-copy streaming | Amazon S3, Stripe | 8KB buffer, O(1) memory |
-| Distributed replication | DynamoDB, Cassandra | P2P with Kafka coordination |
-| Self-healing | AWS, Azure | 60s scanner + rate limiter |
-| Exponential backoff | Amazon, Google | 1s → 2s → 4s with jitter |
-| Atomic file I/O | Databases, firmware | fsync + atomic move |
-| Event-driven architecture | LinkedIn, Netflix | Kafka-based async replication |
