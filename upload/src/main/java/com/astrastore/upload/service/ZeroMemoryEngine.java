@@ -1,5 +1,6 @@
 package com.astrastore.upload.service;
 
+import com.astrastore.shared.events.ChunkWrittenEvent;
 import com.astrastore.shared.manifest.ChunkManifest;
 import com.astrastore.shared.manifest.ObjectManifest;
 import com.astrastore.shared.strategy.PlacementStrategy;
@@ -28,10 +29,14 @@ public class ZeroMemoryEngine {
 
     private final PlacementStrategy placementStrategy;
     private final ObjectMapper objectMapper;
+    private final KafkaPublisherService kafkaPublisherService;
 
-    public ZeroMemoryEngine(PlacementStrategy placementStrategy, ObjectMapper objectMapper) {
+    public ZeroMemoryEngine(PlacementStrategy placementStrategy,
+                            ObjectMapper objectMapper,
+                            KafkaPublisherService kafkaPublisherService) {
         this.placementStrategy = placementStrategy;
         this.objectMapper = objectMapper;
+        this.kafkaPublisherService = kafkaPublisherService;
     }
 
     /**
@@ -143,6 +148,20 @@ public class ZeroMemoryEngine {
 
         log.debug("Chunk finalized — chunkId={}, node={}, checksum={}",
                 manifest.chunkId(), node, manifest.checksum());
+
+        publishChunkEvent(manifest);
+
         return manifest;
+    }
+
+    private void publishChunkEvent(ChunkManifest manifest) {
+        ChunkWrittenEvent event = ChunkWrittenEvent.builder()
+                .chunkId(manifest.chunkId())
+                .primaryNodeIp(manifest.nodeIp())
+                .sizeBytes(manifest.sizeBytes())
+                .checksum(manifest.checksum())
+                .build();
+
+        kafkaPublisherService.publishChunkWritten(event);
     }
 }
