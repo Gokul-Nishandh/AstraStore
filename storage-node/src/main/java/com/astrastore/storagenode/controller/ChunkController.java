@@ -1,5 +1,6 @@
 package com.astrastore.storagenode.controller;
 
+import com.astrastore.storagenode.dto.ChunkResponse;
 import com.astrastore.storagenode.service.ChunkStorageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,41 +25,36 @@ import java.nio.file.Path;
 @Slf4j
 public class ChunkController {
 
-    private static final String HASH_HEADER = "X-Content-Hash";
-    private static final String HASH_HEADER_LOWER = "x-content-hash";
-
     private final ChunkStorageService chunkStorageService;
 
     /**
-     * Stores a binary chunk after verifying its content hash.
-     * Returns 201 Created on success, 409 Conflict if chunk already exists,
-     * or 400 Bad Request if the hash verification fails.
+     * Stores a binary chunk and returns its computed checksum.
+     * Returns 201 Created with chunk metadata, or 409 Conflict if chunk already exists.
      */
     @PostMapping("/{chunkId}")
-    public ResponseEntity<?> storeChunk(
+    public ResponseEntity<ChunkResponse> storeChunk(
             @PathVariable String chunkId,
-            @RequestHeader(HASH_HEADER_LOWER) String contentHash,
             @RequestBody byte[] body
     ) {
         log.info("Storing chunk — chunkId={}, size={}", chunkId, body.length);
 
         try {
-            boolean stored = chunkStorageService.storeChunk(chunkId, body, contentHash);
+            String checksum = chunkStorageService.storeChunk(chunkId, body);
 
-            if (stored) {
-                return ResponseEntity
-                        .status(HttpStatus.CREATED)
-                        .body(null);
-            } else {
-                return ResponseEntity
-                        .status(HttpStatus.CONFLICT)
-                        .body(null);
-            }
+            ChunkResponse response = ChunkResponse.builder()
+                    .chunkId(chunkId)
+                    .checksum(checksum)
+                    .sizeBytes((long) body.length)
+                    .build();
+
+            return ResponseEntity
+                    .status(HttpStatus.CREATED)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(response);
+
         } catch (IOException e) {
             log.error("Failed to store chunk — chunkId={}", chunkId, e);
-            return ResponseEntity
-                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(null);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 
