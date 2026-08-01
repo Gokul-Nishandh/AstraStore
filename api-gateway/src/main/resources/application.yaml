@@ -14,9 +14,9 @@ spring:
         - id: upload-route
           uri: http://upload:8082
           predicates:
-            - Path=/api/upload/**
+            - Path=/api/v1/upload/**
           filters:
-            - RewritePath=/api/upload/(?<segment>.*), /$\{segment}
+            - RewritePath=/api/v1/upload/?(?<segment>.*), /$\{segment}
         # Download
         - id: download-route
           uri: http://download:8083

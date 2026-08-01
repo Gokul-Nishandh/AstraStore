@@ -9,7 +9,8 @@ include(
         "placement",
         "replication",
         "monitoring",
-        "storage-node"
+        "storage-node",
+        "astrastore-shared"
 )
 
 project(":api-gateway").name    = "api-gateway"
@@ -21,3 +22,4 @@ project(":placement").name      = "placement"
 project(":replication").name    = "replication"
 project(":monitoring").name     = "monitoring"
 project(":storage-node").name    = "storage-node"
+project(":astrastore-shared").name = "astrastore-shared"

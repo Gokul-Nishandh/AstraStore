@@ -1,0 +1,47 @@
+// ============================================================
+//  astrastore-shared — Shared contracts and interfaces
+//
+//  Responsibilities:
+//    - Data records (ChunkManifest, ObjectManifest)
+//    - Strategy interfaces (PlacementStrategy, StorageStreamClient)
+//    - Shared across Upload, Download, Replication services
+// ============================================================
+plugins {
+    id 'java-library'
+    id 'io.spring.dependency-management'
+}
+
+description = 'AstraStore Shared Module'
+
+repositories {
+    mavenCentral()
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = 21
+}
+
+tasks.withType(Test) {
+    useJUnitPlatform()
+}
+
+dependencyManagement {
+    imports {
+        mavenBom 'org.springframework.boot:spring-boot-dependencies:3.3.5'
+    }
+}
+
+dependencies {
+    // Lombok — reduces boilerplate (Getter, Builder, etc.)
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+
+    // Testing
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
