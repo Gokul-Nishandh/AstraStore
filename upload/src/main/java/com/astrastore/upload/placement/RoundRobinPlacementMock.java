@@ -4,6 +4,7 @@ import com.astrastore.shared.strategy.PlacementStrategy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -28,6 +29,21 @@ public class RoundRobinPlacementMock implements PlacementStrategy {
         currentIndex = (currentIndex + 1) % NODES.size();
         log.debug("Round-robin selected node — index={}, node={}", currentIndex - 1, node);
         return node;
+    }
+
+    @Override
+    public List<String> getNextTargetNodes(int count, String excludeNode) {
+        List<String> targets = new ArrayList<>();
+        int attempts = 0;
+        while (targets.size() < count && attempts < NODES.size()) {
+            String node = NODES.get((currentIndex + attempts) % NODES.size());
+            if (!node.equals(excludeNode)) {
+                targets.add(node);
+            }
+            attempts++;
+        }
+        currentIndex = (currentIndex + 1) % NODES.size();
+        return targets;
     }
 
     /**

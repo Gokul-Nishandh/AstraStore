@@ -71,7 +71,7 @@ public class HttpStorageStreamClient implements StorageStreamClient {
                     .chunkId(node.get("chunkId").asText())
                     .checksum(node.get("checksum").asText())
                     .sizeBytes(node.get("sizeBytes").asLong())
-                    .nodeIp(url.getHost() + ":" + url.getPort())
+                    .nodeIp(url.getProtocol() + "://" + url.getHost() + ":" + url.getPort())
                     .build();
 
         } finally {
