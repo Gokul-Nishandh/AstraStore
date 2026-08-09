@@ -25,6 +25,8 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
+        hbm2ddl:
+          create_namespaces: true
 
   # Kafka producer configuration
   kafka:

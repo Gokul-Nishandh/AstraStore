@@ -2,6 +2,7 @@ package com.astrastore.upload.client;
 
 import com.astrastore.shared.manifest.ChunkManifest;
 import com.astrastore.shared.strategy.StorageStreamClient;
+import com.astrastore.upload.exception.ChunkWriteException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -36,21 +37,29 @@ public class HttpStorageStreamClient implements StorageStreamClient {
     public void openStream(String nodeAddress, String chunkId) throws IOException {
         String endpoint = nodeAddress + "/api/v1/chunks/" + chunkId;
 
-        url = new URL(endpoint);
-        connection = (HttpURLConnection) url.openConnection();
-        connection.setDoOutput(true);
-        connection.setRequestMethod("POST");
-        connection.setRequestProperty("Content-Type", "application/octet-stream");
-        connection.setChunkedStreamingMode(BUFFER_SIZE);
-        connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
-        connection.setReadTimeout(READ_TIMEOUT_MS);
+        try {
+            url = new URL(endpoint);
+            connection = (HttpURLConnection) url.openConnection();
+            connection.setDoOutput(true);
+            connection.setRequestMethod("POST");
+            connection.setRequestProperty("Content-Type", "application/octet-stream");
+            connection.setChunkedStreamingMode(BUFFER_SIZE);
+            connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
+            connection.setReadTimeout(READ_TIMEOUT_MS);
 
-        outputStream = connection.getOutputStream();
+            outputStream = connection.getOutputStream();
+        } catch (IOException e) {
+            throw new ChunkWriteException("Failed to open chunk stream to node " + nodeAddress + " — " + e.getMessage(), e);
+        }
     }
 
     @Override
     public void write(byte[] buffer, int offset, int length) throws IOException {
-        outputStream.write(buffer, offset, length);
+        try {
+            outputStream.write(buffer, offset, length);
+        } catch (IOException e) {
+            throw new ChunkWriteException("Failed to write chunk bytes to node " + url + " — " + e.getMessage(), e);
+        }
     }
 
     @Override
@@ -61,7 +70,7 @@ public class HttpStorageStreamClient implements StorageStreamClient {
 
             int responseCode = connection.getResponseCode();
             if (responseCode != 201) {
-                throw new IOException("Storage node returned non-201: " + responseCode);
+                throw new ChunkWriteException("Storage node returned non-201: " + responseCode);
             }
 
             String response = new String(connection.getInputStream().readAllBytes());
@@ -74,6 +83,8 @@ public class HttpStorageStreamClient implements StorageStreamClient {
                     .nodeIp(url.getProtocol() + "://" + url.getHost() + ":" + url.getPort())
                     .build();
 
+        } catch (IOException e) {
+            throw new ChunkWriteException("Storage node chunk write failed — " + e.getMessage(), e);
         } finally {
             disconnect();
         }

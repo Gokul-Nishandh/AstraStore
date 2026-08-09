@@ -10,13 +10,13 @@ spring:
           uri: http://auth:8081
           predicates:
             - Path=/api/auth/**
-        # Upload
+        # Upload Service (PUT object)
         - id: upload-route
           uri: http://upload:8082
           predicates:
-            - Path=/api/v1/upload/**
-          filters:
-            - RewritePath=/api/v1/upload/?(?<segment>.*), /$\{segment}
+            - Path=/api/v1/buckets/{bucketId}/objects/{key}
+            - Method=PUT
+
         # Download
         - id: download-route
           uri: http://download:8083
@@ -24,13 +24,16 @@ spring:
             - Path=/api/download/**
           filters:
             - RewritePath=/api/download/(?<segment>.*), /$\{segment}
-        # Metadata
-        - id: metadata-route
+        # Metadata (Buckets & Objects)
+        - id: bucket-metadata-route
           uri: http://metadata:8084
           predicates:
-            - Path=/api/metadata/**
-          filters:
-            - RewritePath=/api/metadata/(?<segment>.*), /$\{segment}
+            - Path=/api/v1/buckets/**
+        - id: object-metadata-route
+          uri: http://metadata:8084
+          predicates:
+            - Path=/api/v1/objects/**
+
         # Placement
         - id: placement-route
           uri: http://placement:8085
@@ -60,7 +63,7 @@ spring:
       # Global CORS — allow Grafana / Jaeger UI to query actuator endpoints
       globalcors:
         corsConfigurations:
-          '[/**]':
+          "[/**]":
             allowedOrigins: "*"
             allowedMethods:
               - GET
