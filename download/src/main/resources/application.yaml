@@ -5,19 +5,18 @@ spring:
   application:
     name: download-service
 
-  # Kafka consumer
-  kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
-    consumer:
-      group-id: download-service
-      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
-      auto-offset-reset: earliest
-      properties:
-        spring.json.trusted.packages: "*"
-
 server:
   port: 8083
+
+# Downstream service endpoints
+services:
+  metadata-url: ${SERVICES_METADATA_URL:http://localhost:8084}
+
+# Download Service tuning (Volume 2, Section 6.4)
+download:
+  fetch-parallelism: 4
+  fallback-timeout-ms: 3000
+  stream-buffer-kb: 256
 
 # Actuator & Observability
 management:
@@ -47,4 +46,3 @@ otel:
 logging:
   level:
     com.astrastore: DEBUG
-    org.springframework.kafka: INFO

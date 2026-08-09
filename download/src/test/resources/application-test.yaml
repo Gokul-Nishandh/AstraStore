@@ -1,0 +1,15 @@
+# ============================================================
+#  Download Service — Test Profile
+#  Disables actuator endpoints and tracing exports so the
+#  Spring context loads without a Jaeger broker.
+# ============================================================
+spring:
+  application:
+    name: download-service-test
+
+management:
+  tracing:
+    sampling:
+      probability: 0.0
+  endpoints:
+    enabled-by-default: false
