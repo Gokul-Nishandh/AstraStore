@@ -53,3 +53,27 @@ logging:
   level:
     com.astrastore: DEBUG
     org.springframework.kafka: INFO
+
+# ============================================================
+#  AstraStore Cluster — Node Registry
+#  All known storage nodes that the HeartbeatService polls.
+#  Override via environment variables for Docker deployments.
+# ============================================================
+astrastore:
+  cluster:
+    nodes:
+      - id: storage-node-1
+        url: ${STORAGE_NODE_1_URL:http://storage-node-1:8088}
+      - id: storage-node-2
+        url: ${STORAGE_NODE_2_URL:http://storage-node-2:8088}
+      - id: storage-node-3
+        url: ${STORAGE_NODE_3_URL:http://storage-node-3:8088}
+    heartbeat:
+      # How often to poll each node (ms)
+      interval-ms: 10000
+      # HTTP connect + read timeout per heartbeat call (ms)
+      timeout-ms: 5000
+      # Consecutive failures before DEGRADED → DOWN transition
+      failure-threshold: 3
+      # Consecutive successes while RECOVERING before → HEALTHY
+      recovery-threshold: 2

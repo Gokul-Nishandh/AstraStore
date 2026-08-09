@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="JavacSettings">
+    <option name="ADDITIONAL_OPTIONS_OVERRIDE">
+      <module name="AstraStore.api-gateway" options="-parameters" />
+      <module name="AstraStore.api-gateway.main" options="-parameters" />
+      <module name="AstraStore.api-gateway.test" options="-parameters" />
+      <module name="AstraStore.auth" options="-parameters" />
+      <module name="AstraStore.auth.main" options="-parameters" />
+      <module name="AstraStore.auth.test" options="-parameters" />
+      <module name="AstraStore.download" options="-parameters" />
+      <module name="AstraStore.download.main" options="-parameters" />
+      <module name="AstraStore.download.test" options="-parameters" />
+      <module name="AstraStore.metadata" options="-parameters" />
+      <module name="AstraStore.metadata.main" options="-parameters" />
+      <module name="AstraStore.metadata.test" options="-parameters" />
+      <module name="AstraStore.monitoring" options="-parameters" />
+      <module name="AstraStore.monitoring.main" options="-parameters" />
+      <module name="AstraStore.monitoring.test" options="-parameters" />
+      <module name="AstraStore.placement" options="-parameters" />
+      <module name="AstraStore.placement.main" options="-parameters" />
+      <module name="AstraStore.placement.test" options="-parameters" />
+      <module name="AstraStore.replication" options="-parameters" />
+      <module name="AstraStore.replication.main" options="-parameters" />
+      <module name="AstraStore.replication.test" options="-parameters" />
+      <module name="AstraStore.upload" options="-parameters" />
+      <module name="AstraStore.upload.main" options="-parameters" />
+      <module name="AstraStore.upload.test" options="-parameters" />
+    </option>
+  </component>
+</project>
