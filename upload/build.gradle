@@ -9,6 +9,7 @@
 plugins {
     id 'org.springframework.boot'
     id 'io.spring.dependency-management'
+    id 'jacoco'
 }
 
 description = 'AstraStore Upload Service'
@@ -55,3 +56,24 @@ dependencies {
 bootRun {
     args = ['--spring.profiles.active=local']
 }
+
+// Coverage (Volume 7, Section 2.2 — NFR-011: >= 70% unit coverage per service)
+jacocoTestReport {
+    dependsOn test
+    reports {
+        xml.required = true
+        html.required = true
+    }
+}
+
+jacocoTestCoverageVerification {
+    violationRules {
+        rule {
+            limit {
+                minimum = 0.70
+            }
+        }
+    }
+}
+
+check.dependsOn jacocoTestCoverageVerification

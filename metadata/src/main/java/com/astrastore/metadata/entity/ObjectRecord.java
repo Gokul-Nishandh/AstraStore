@@ -13,7 +13,7 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "objects", schema = "metadata", uniqueConstraints = {
-        @UniqueConstraint(name = "uk_bucket_key", columnNames = { "bucket_id", "key" })
+        @UniqueConstraint(name = "uk_bucket_key", columnNames = { "bucket_id", "\"key\"" })
 }, indexes = {
         @Index(name = "idx_objects_bucket_id", columnList = "bucket_id"),
         @Index(name = "idx_objects_status", columnList = "status")
@@ -34,7 +34,7 @@ public class ObjectRecord {
     private Bucket bucket;
 
     @NotBlank
-    @Column(name = "key", length = 1024, nullable = false)
+    @Column(name = "\"key\"", length = 1024, nullable = false)
     private String key;
 
     @NotNull
