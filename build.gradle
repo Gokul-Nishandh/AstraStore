@@ -16,6 +16,9 @@ ext {
     // Required for JDK 25 compatibility: Lombok 1.18.34 crashes on JDK 25
     // due to sun.misc.Unsafe removal. 1.18.40 is the first JDK-25-compatible release.
     set('lombok.version', '1.18.40')
+    // Override Mockito and ByteBuddy for JDK 25 compatibility
+    set('mockito.version', '5.15.2')
+    set('byte-buddy.version', '1.15.11')
 }
 
 allprojects {
@@ -47,6 +50,14 @@ subprojects {
                 details.useVersion '1.18.40'
                 details.because 'JDK 25 requires Lombok 1.18.40+'
             }
+            if (details.requested.group == 'org.mockito') {
+                details.useVersion '5.15.2'
+                details.because 'JDK 25 requires Mockito 5.15.2+'
+            }
+            if (details.requested.group == 'net.bytebuddy') {
+                details.useVersion '1.15.11'
+                details.because 'JDK 25 requires ByteBuddy 1.15.11+'
+            }
         }
     }
 
@@ -56,6 +67,7 @@ subprojects {
 
     tasks.withType(Test) {
         useJUnitPlatform()
+        systemProperty 'net.bytebuddy.experimental', 'true'
     }
 }
 
