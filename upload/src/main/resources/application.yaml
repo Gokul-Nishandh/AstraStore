@@ -27,6 +27,10 @@ spring:
 server:
   port: 8082
 
+astrastore:
+  placement:
+    url: ${PLACEMENT_SERVICE_URL:http://placement:8085}
+
 # Actuator & Observability
 management:
   endpoints:
