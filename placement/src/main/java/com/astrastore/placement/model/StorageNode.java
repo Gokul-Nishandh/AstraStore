@@ -73,6 +73,13 @@ public class StorageNode {
     @Builder.Default
     private final AtomicInteger consecutiveSuccesses = new AtomicInteger(0);
 
+    /**
+     * Number of active connections currently routed to this node.
+     * Note: This acts as a placeholder metric for load until real telemetry is added.
+     */
+    @Builder.Default
+    private final AtomicInteger activeConnections = new AtomicInteger(0);
+
     // ----------------------------------------------------------------
     // Disk capacity metrics — updated on every successful heartbeat
     // ----------------------------------------------------------------
