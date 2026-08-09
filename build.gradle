@@ -12,6 +12,10 @@ plugins {
 // Shared dependency management
 ext {
     set('springCloudVersion', '2023.0.3')
+    // Override Spring Boot BOM's Lombok version (1.18.34 → 1.18.40).
+    // Required for JDK 25 compatibility: Lombok 1.18.34 crashes on JDK 25
+    // due to sun.misc.Unsafe removal. 1.18.40 is the first JDK-25-compatible release.
+    set('lombok.version', '1.18.40')
 }
 
 allprojects {
@@ -30,6 +34,20 @@ subprojects {
     java {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
+    }
+
+    // Force Lombok 1.18.40+ across all subprojects.
+    // Spring Boot 3.3.5 BOM pins Lombok to 1.18.34 which is incompatible with JDK 25
+    // (crashes with ExceptionInInitializerError due to sun.misc.Unsafe removal).
+    // Lombok 1.18.40 is the first release with official JDK 25 support.
+    configurations.all {
+        resolutionStrategy.eachDependency { DependencyResolveDetails details ->
+            if (details.requested.group == 'org.projectlombok' &&
+                details.requested.name == 'lombok') {
+                details.useVersion '1.18.40'
+                details.because 'JDK 25 requires Lombok 1.18.40+'
+            }
+        }
     }
 
     tasks.withType(JavaCompile).configureEach {
