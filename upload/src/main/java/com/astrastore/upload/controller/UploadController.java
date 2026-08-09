@@ -2,10 +2,12 @@ package com.astrastore.upload.controller;
 
 import com.astrastore.shared.manifest.ObjectManifest;
 import com.astrastore.upload.dto.UploadResponse;
+import com.astrastore.upload.model.UploadResult;
+import com.astrastore.upload.service.UploadOrchestrator;
 import com.astrastore.upload.service.ZeroMemoryEngine;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -16,17 +18,12 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/")
+@RequiredArgsConstructor
+@Slf4j
 public class UploadController {
 
-    private static final Logger log = LoggerFactory.getLogger(UploadController.class);
-
+    private final UploadOrchestrator uploadOrchestrator;
     private final ZeroMemoryEngine zeroMemoryEngine;
-    private final ObjectMapper objectMapper;
-
-    public UploadController(ZeroMemoryEngine zeroMemoryEngine, ObjectMapper objectMapper) {
-        this.zeroMemoryEngine = zeroMemoryEngine;
-        this.objectMapper = objectMapper;
-    }
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<UploadResponse> uploadFile(
@@ -42,8 +39,27 @@ public class UploadController {
         return ResponseEntity.ok(UploadResponse.fromManifest(manifest));
     }
 
+    @PutMapping(value = "/api/v1/buckets/{bucketId}/objects/{key}", consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE)
+    public ResponseEntity<UploadResult> putObject(
+            @PathVariable UUID bucketId,
+            @PathVariable String key,
+            @RequestHeader(value = "Content-Type", defaultValue = "application/octet-stream") String contentType,
+            jakarta.servlet.http.HttpServletRequest request) throws IOException {
+
+        log.info("PUT Object request — bucketId={}, key={}, contentType={}", bucketId, key, contentType);
+
+        UploadResult result = uploadOrchestrator.handleUpload(request.getInputStream(), bucketId, key, contentType);
+
+        log.info("PUT Object complete — bucketId={}, key={}, chunks={}, globalHash={}",
+                bucketId, key, result.chunkCount(), result.checksum());
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(result);
+    }
+
     @GetMapping("/health")
     public ResponseEntity<String> health() {
         return ResponseEntity.ok("OK");
     }
 }
+
+

@@ -1,0 +1,98 @@
+package com.astrastore.metadata.controller;
+
+import com.astrastore.metadata.dto.chunk.RecordChunkLocationsRequest;
+import com.astrastore.metadata.dto.chunk.UpdateReplicaRequest;
+import com.astrastore.metadata.entity.ChunkLocation;
+import com.astrastore.metadata.entity.ReplicationStatus;
+import com.astrastore.metadata.service.ObjectService;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.http.MediaType;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.web.servlet.MockMvc;
+
+import java.util.List;
+import java.util.UUID;
+
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+
+@WebMvcTest(ChunkIndexController.class)
+@ActiveProfiles("test")
+class ChunkIndexControllerTest {
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Autowired
+    private ObjectMapper objectMapper;
+
+    @MockBean
+    private ObjectService objectService;
+
+    @MockBean
+    private io.micrometer.tracing.Tracer tracer;
+
+    private UUID objectId;
+    private ChunkLocation location0;
+
+    @BeforeEach
+    void setUp() {
+        objectId = UUID.randomUUID();
+        location0 = ChunkLocation.builder()
+                .id(UUID.randomUUID())
+                .objectId(objectId)
+                .chunkIndex(0)
+                .nodeId("storage-node-1")
+                .replicaNodeId("storage-node-2")
+                .replicationStatus(ReplicationStatus.REPLICATED)
+                .checksum("checksum0")
+                .build();
+    }
+
+    @Test
+    void recordChunkLocations_Success() throws Exception {
+        RecordChunkLocationsRequest.ChunkLocationItem item0 = new RecordChunkLocationsRequest.ChunkLocationItem(0, "storage-node-1", "checksum0");
+        RecordChunkLocationsRequest request = new RecordChunkLocationsRequest(List.of(item0));
+
+        when(objectService.recordChunkLocations(anyList())).thenReturn(List.of(location0));
+
+        mockMvc.perform(post("/internal/v1/objects/{objectId}/chunk-locations", objectId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.objectId").value(objectId.toString()))
+                .andExpect(jsonPath("$.chunksRecorded").value(1));
+    }
+
+    @Test
+    void getChunkLocations_Success() throws Exception {
+        when(objectService.getChunkLocations(objectId)).thenReturn(List.of(location0));
+
+        mockMvc.perform(get("/internal/v1/objects/{objectId}/chunk-locations", objectId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].chunkIndex").value(0))
+                .andExpect(jsonPath("$[0].nodeId").value("storage-node-1"));
+    }
+
+    @Test
+    void updateChunkReplica_Success() throws Exception {
+        UpdateReplicaRequest request = new UpdateReplicaRequest("storage-node-2", ReplicationStatus.REPLICATED);
+        when(objectService.updateChunkReplica(eq(objectId), eq(0), eq("storage-node-2"), eq(ReplicationStatus.REPLICATED)))
+                .thenReturn(location0);
+
+        mockMvc.perform(patch("/internal/v1/objects/{objectId}/chunk-locations/{chunkIndex}", objectId, 0)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.replicaNodeId").value("storage-node-2"))
+                .andExpect(jsonPath("$.replicationStatus").value("REPLICATED"));
+    }
+}

@@ -5,6 +5,7 @@ import com.astrastore.shared.manifest.ChunkManifest;
 import com.astrastore.shared.manifest.ObjectManifest;
 import com.astrastore.shared.strategy.PlacementStrategy;
 import com.astrastore.upload.client.HttpStorageStreamClient;
+import com.astrastore.upload.exception.ChecksumMismatchException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -30,23 +31,26 @@ public class ZeroMemoryEngine {
     private final PlacementStrategy placementStrategy;
     private final ObjectMapper objectMapper;
     private final KafkaPublisherService kafkaPublisherService;
+    private final com.astrastore.upload.client.MetadataClient metadataClient;
 
     public ZeroMemoryEngine(PlacementStrategy placementStrategy,
                             ObjectMapper objectMapper,
-                            KafkaPublisherService kafkaPublisherService) {
+                            KafkaPublisherService kafkaPublisherService,
+                            com.astrastore.upload.client.MetadataClient metadataClient) {
         this.placementStrategy = placementStrategy;
         this.objectMapper = objectMapper;
         this.kafkaPublisherService = kafkaPublisherService;
+        this.metadataClient = metadataClient;
+    }
+
+    public ObjectManifest process(InputStream inputStream) throws IOException {
+        return process(inputStream, null, null, null);
     }
 
     /**
-     * Processes an input stream and distributes chunks to storage nodes.
-     *
-     * @param inputStream the client data stream
-     * @return the complete ObjectManifest with all chunk metadata
-     * @throws IOException if any I/O error occurs
+     * Processes an input stream, distributes chunks to storage nodes, and commits metadata to PostgreSQL.
      */
-    public ObjectManifest process(InputStream inputStream) throws IOException {
+    public ObjectManifest process(InputStream inputStream, UUID bucketId, String key, String contentType) throws IOException {
         String objectId = UUID.randomUUID().toString();
         log.info("Starting zero-memory upload — objectId={}", objectId);
 
@@ -129,11 +133,50 @@ public class ZeroMemoryEngine {
         log.info("Upload complete — objectId={}, chunks={}, totalBytes={}, globalHash={}",
                 objectId, chunks.size(), totalBytesRead, globalHash);
 
+        // --- Commit Metadata to PostgreSQL via Metadata Service ---
+        // Fail closed: if the metadata commit fails, the upload must NOT return
+        // 201 Created, otherwise the client receives a success for an object
+        // that was never recorded (Volume 1, Section 10.1 consistency model).
+        UUID committedId = null;
+        if (bucketId != null) {
+            com.astrastore.upload.client.MetadataClient.CreateObjectRecordRequest objReq =
+                    com.astrastore.upload.client.MetadataClient.CreateObjectRecordRequest.builder()
+                            .id(UUID.fromString(objectId))
+                            .bucketId(bucketId)
+                            .key(key != null ? key : "uploaded-" + objectId)
+                            .sizeBytes(totalBytesRead)
+                            .checksum(globalHash)
+                            .contentType(contentType != null ? contentType : "application/octet-stream")
+                            .build();
+
+            com.astrastore.upload.client.MetadataClient.CreatedObjectRecordResponse createdObj =
+                    metadataClient.createObjectRecord(objReq);
+
+            committedId = createdObj.getId();
+
+            List<com.astrastore.upload.client.MetadataClient.ChunkLocationItem> chunkItems = new ArrayList<>();
+            for (int i = 0; i < chunks.size(); i++) {
+                ChunkManifest cm = chunks.get(i);
+                chunkItems.add(com.astrastore.upload.client.MetadataClient.ChunkLocationItem.builder()
+                        .chunkIndex(i)
+                        .nodeId(cm.nodeIp())
+                        .checksum(cm.checksum())
+                        .build());
+            }
+
+            metadataClient.recordChunkLocations(committedId, chunkItems);
+            log.info("Successfully committed object metadata and {} chunk locations to PostgreSQL", chunks.size());
+        }
+
+        String committedObjectId = committedId != null ? committedId.toString() : objectId;
+
         return ObjectManifest.builder()
+                .objectId(committedObjectId)
                 .globalHash(globalHash)
                 .chunks(chunks)
                 .build();
     }
+
 
     private ChunkManifest finalizeChunk(HttpStorageStreamClient client,
                                       DigestService chunkDigest,
@@ -142,7 +185,7 @@ public class ZeroMemoryEngine {
 
         String computedHash = chunkDigest.extractHex();
         if (!computedHash.equalsIgnoreCase(manifest.checksum())) {
-            throw new IOException("Chunk checksum mismatch — computed=" + computedHash +
+            throw new ChecksumMismatchException("Chunk checksum mismatch — computed=" + computedHash +
                     ", storage=" + manifest.checksum());
         }
 
