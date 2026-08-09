@@ -90,6 +90,20 @@ class UploadControllerTest {
     }
 
     @Test
+    void putObject_withFolderKey_returnsCreated() throws Exception {
+        UploadResult result = new UploadResult(
+                OBJECT_ID, BUCKET_ID, "reports/q3.pdf", 100L, "hash", 1, Instant.parse("2026-07-26T10:20:00Z"));
+        when(uploadOrchestrator.handleUpload(any(InputStream.class), eq(BUCKET_ID), eq("reports/q3.pdf"), anyString()))
+                .thenReturn(result);
+
+        mockMvc.perform(put("/api/v1/buckets/{bucketId}/objects/reports/q3.pdf", BUCKET_ID)
+                        .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                        .content("some-bytes"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.key").value("reports/q3.pdf"));
+    }
+
+    @Test
     void putObject_returns422OnChecksumMismatch() throws Exception {
         when(uploadOrchestrator.handleUpload(any(InputStream.class), eq(BUCKET_ID), eq("q3.pdf"), any()))
                 .thenThrow(new ChecksumMismatchException("Chunk checksum mismatch"));

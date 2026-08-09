@@ -71,6 +71,17 @@ class DownloadControllerTest {
     }
 
     @Test
+    void downloadByBucketAndKey_withFolderKey_streamsBytes() throws Exception {
+        when(downloadOrchestrator.prepareByBucketAndKey(BUCKET_ID, "reports/q3.pdf")).thenReturn(payload());
+        stubStreamingBody();
+
+        mockMvc.perform(get("/api/v1/buckets/{bucketId}/objects/reports/q3.pdf", BUCKET_ID))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Checksum-SHA256", CHECKSUM))
+                .andExpect(content().bytes(CONTENT));
+    }
+
+    @Test
     void head_returnsHeadersWithoutBody() throws Exception {
         when(downloadOrchestrator.prepare(OBJECT_ID)).thenReturn(payload());
 

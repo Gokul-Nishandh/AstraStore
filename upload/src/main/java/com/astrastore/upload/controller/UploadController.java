@@ -39,7 +39,7 @@ public class UploadController {
         return ResponseEntity.ok(UploadResponse.fromManifest(manifest));
     }
 
-    @PutMapping(value = "/api/v1/buckets/{bucketId}/objects/{key}", consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE)
+    @PutMapping(value = "/api/v1/buckets/{bucketId}/objects/{*key}", consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE)
     public ResponseEntity<UploadResult> putObject(
             @PathVariable UUID bucketId,
             @PathVariable String key,
@@ -48,7 +48,8 @@ public class UploadController {
 
         log.info("PUT Object request — bucketId={}, key={}, contentType={}", bucketId, key, contentType);
 
-        UploadResult result = uploadOrchestrator.handleUpload(request.getInputStream(), bucketId, key, contentType);
+        UploadResult result = uploadOrchestrator.handleUpload(
+                request.getInputStream(), bucketId, normalizeKey(key), contentType);
 
         log.info("PUT Object complete — bucketId={}, key={}, chunks={}, globalHash={}",
                 bucketId, key, result.chunkCount(), result.checksum());
@@ -59,6 +60,14 @@ public class UploadController {
     @GetMapping("/health")
     public ResponseEntity<String> health() {
         return ResponseEntity.ok("OK");
+    }
+
+    private static String normalizeKey(String key) {
+        String normalized = key == null ? "" : key;
+        while (normalized.startsWith("/")) {
+            normalized = normalized.substring(1);
+        }
+        return normalized;
     }
 }
 

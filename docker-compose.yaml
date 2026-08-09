@@ -238,6 +238,7 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
       OTEL_METRICS_EXPORTER: none
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SERVICES_METADATA_URL: http://metadata:8084
     depends_on:
       kafka:
         condition: service_healthy
@@ -315,6 +316,7 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
       OTEL_METRICS_EXPORTER: none
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SERVICES_METADATA_URL: http://metadata:8084
     depends_on:
       kafka:
         condition: service_healthy
