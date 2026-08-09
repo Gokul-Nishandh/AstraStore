@@ -40,8 +40,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 class DownloadServiceIntegrationTest {
 
     private static final String OBJECT_KEY = "q3.pdf";
+    private static final String FOLDER_KEY = "reports/q3.pdf";
 
     private static final UUID MAIN_OBJECT_ID = UUID.randomUUID();
+    private static final UUID FOLDER_OBJECT_ID = UUID.randomUUID();
     private static final UUID FALLBACK_OBJECT_ID = UUID.randomUUID();
     private static final UUID CORRUPT_OBJECT_ID = UUID.randomUUID();
     private static final UUID UNKNOWN_OBJECT_ID = UUID.randomUUID();
@@ -51,6 +53,8 @@ class DownloadServiceIntegrationTest {
     private static final byte[] MAIN_CHUNK_1 = filled(200_000, (byte) 0x42);
     private static final byte[] MAIN_BYTES = concat(MAIN_CHUNK_0, MAIN_CHUNK_1);
 
+    private static final byte[] FOLDER_BYTES = filled(60_000, (byte) 0x45);
+
     private static final byte[] FALLBACK_BYTES = filled(50_000, (byte) 0x43);
     private static final byte[] CORRUPT_INTENDED = filled(75_000, (byte) 0x44);
     private static final byte[] CORRUPT_SERVED = filled(75_000, (byte) 0x99);
@@ -58,6 +62,7 @@ class DownloadServiceIntegrationTest {
     private static final ChecksumVerifier VERIFIER = new ChecksumVerifier();
 
     private static final String MAIN_CHECKSUM = VERIFIER.sha256(MAIN_BYTES);
+    private static final String FOLDER_CHECKSUM = VERIFIER.sha256(FOLDER_BYTES);
     private static final String FALLBACK_CHECKSUM = VERIFIER.sha256(FALLBACK_BYTES);
     private static final String CORRUPT_CHECKSUM = VERIFIER.sha256(CORRUPT_INTENDED);
 
@@ -82,6 +87,7 @@ class DownloadServiceIntegrationTest {
 
         PRIMARY.serve(mainChunk0, MAIN_CHUNK_0);
         PRIMARY.serve(mainChunk1, MAIN_CHUNK_1);
+        PRIMARY.serve(ChunkFetcher.chunkId(FOLDER_OBJECT_ID, 0), FOLDER_BYTES);
         PRIMARY.fail(fallbackChunk);
         REPLICA.serve(fallbackChunk, FALLBACK_BYTES);
         CORRUPT_NODE.serve(corruptChunk, CORRUPT_SERVED);
@@ -94,6 +100,13 @@ class DownloadServiceIntegrationTest {
                         "PENDING", VERIFIER.sha256(MAIN_CHUNK_0)),
                 new ChunkLocation(UUID.randomUUID(), MAIN_OBJECT_ID, 1, PRIMARY.baseUrl(), null,
                         "PENDING", VERIFIER.sha256(MAIN_CHUNK_1))));
+
+        METADATA.registerObject(FOLDER_OBJECT_ID, new ObjectMetadata(
+                FOLDER_OBJECT_ID, BUCKET_ID, FOLDER_KEY, (long) FOLDER_BYTES.length, FOLDER_CHECKSUM,
+                "application/pdf", "ACTIVE", "2026-07-26T10:23:00Z", 1L, 1L));
+        METADATA.registerLocations(FOLDER_OBJECT_ID, List.of(
+                new ChunkLocation(UUID.randomUUID(), FOLDER_OBJECT_ID, 0, PRIMARY.baseUrl(), null,
+                        "PENDING", VERIFIER.sha256(FOLDER_BYTES))));
 
         METADATA.registerObject(FALLBACK_OBJECT_ID, new ObjectMetadata(
                 FALLBACK_OBJECT_ID, BUCKET_ID, "fallback.bin", (long) FALLBACK_BYTES.length, FALLBACK_CHECKSUM,
@@ -112,7 +125,10 @@ class DownloadServiceIntegrationTest {
         METADATA.registerBucket(BUCKET_ID, List.of(
                 new ObjectMetadata(
                         MAIN_OBJECT_ID, BUCKET_ID, OBJECT_KEY, (long) MAIN_BYTES.length, MAIN_CHECKSUM,
-                        "application/pdf", "ACTIVE", "2026-07-26T10:20:00Z", 2L, 2L)));
+                        "application/pdf", "ACTIVE", "2026-07-26T10:20:00Z", 2L, 2L),
+                new ObjectMetadata(
+                        FOLDER_OBJECT_ID, BUCKET_ID, FOLDER_KEY, (long) FOLDER_BYTES.length, FOLDER_CHECKSUM,
+                        "application/pdf", "ACTIVE", "2026-07-26T10:23:00Z", 1L, 1L)));
     }
 
     @Autowired
@@ -143,6 +159,16 @@ class DownloadServiceIntegrationTest {
         assertThat(response.getStatusCode().value()).isEqualTo(200);
         assertThat(response.getBody()).isEqualTo(MAIN_BYTES);
         assertThat(response.getHeaders().getFirst("X-Checksum-SHA256")).isEqualTo(MAIN_CHECKSUM);
+    }
+
+    @Test
+    void downloadByBucketAndKey_withFolderKey_streamsVerifiedObjectBytes() {
+        ResponseEntity<byte[]> response = restTemplate.getForEntity(
+                "/api/v1/buckets/" + BUCKET_ID + "/objects/" + FOLDER_KEY, byte[].class);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(200);
+        assertThat(response.getBody()).isEqualTo(FOLDER_BYTES);
+        assertThat(response.getHeaders().getFirst("X-Checksum-SHA256")).isEqualTo(FOLDER_CHECKSUM);
     }
 
     @Test

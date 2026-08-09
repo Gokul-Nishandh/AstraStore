@@ -24,14 +24,14 @@ public class DownloadController {
 
     private final DownloadOrchestrator downloadOrchestrator;
 
-    @GetMapping("/api/v1/buckets/{bucketId}/objects/{key}")
+    @GetMapping("/api/v1/buckets/{bucketId}/objects/{*key}")
     public void downloadByBucketAndKey(
             @PathVariable UUID bucketId,
             @PathVariable String key,
             HttpServletResponse response) throws IOException {
 
         log.info("Download by bucket + key — bucketId={}, key={}", bucketId, key);
-        stream(downloadOrchestrator.prepareByBucketAndKey(bucketId, key), response);
+        stream(downloadOrchestrator.prepareByBucketAndKey(bucketId, normalizeKey(key)), response);
     }
 
     @GetMapping("/api/v1/objects/{objectId}")
@@ -62,5 +62,13 @@ public class DownloadController {
         response.setContentType(contentType);
         response.setContentLengthLong(payload.sizeBytes());
         response.setHeader(CHECKSUM_HEADER, payload.checksum());
+    }
+
+    private static String normalizeKey(String key) {
+        String normalized = key == null ? "" : key;
+        while (normalized.startsWith("/")) {
+            normalized = normalized.substring(1);
+        }
+        return normalized;
     }
 }

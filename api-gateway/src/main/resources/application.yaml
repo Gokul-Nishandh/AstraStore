@@ -14,8 +14,20 @@ spring:
         - id: upload-route
           uri: http://upload:8082
           predicates:
-            - Path=/api/v1/buckets/{bucketId}/objects/{key}
+            - Path=/api/v1/buckets/{bucketId}/objects/{*key}
             - Method=PUT
+
+        # Download Service (GET/HEAD object)
+        - id: download-by-key-route
+          uri: http://download:8083
+          predicates:
+            - Path=/api/v1/buckets/{bucketId}/objects/{*key}
+            - Method=GET
+        - id: download-by-id-route
+          uri: http://download:8083
+          predicates:
+            - Path=/api/v1/objects/{objectId}
+            - Method=GET,HEAD
 
         # Download
         - id: download-route
