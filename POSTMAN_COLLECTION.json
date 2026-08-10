@@ -1,0 +1,308 @@
+{
+  "info": {
+    "name": "AstraStore - All 4 Modules Integration Flow",
+    "description": "End-to-end integration tests covering Auth (4A), Bucket (1), Storage (3), and Placement (2)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {"key": "gatewayUrl", "value": "http://localhost:8080"},
+    {"key": "authUrl", "value": "http://localhost:8081"},
+    {"key": "metadataUrl", "value": "http://localhost:8084"},
+    {"key": "placementUrl", "value": "http://localhost:8085"},
+    {"key": "gatewayToken", "value": ""},
+    {"key": "apiKeyRaw", "value": ""},
+    {"key": "bucketId", "value": ""},
+    {"key": "bucketName", "value": "postman-flow-bucket"},
+    {"key": "objectId", "value": ""}
+  ],
+  "item": [
+    {
+      "name": "━━━ MODULE 4A: AUTH ━━━",
+      "item": [
+        {
+          "name": "1. Register User",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "url": "{{authUrl}}/api/auth/register",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"postman_user\",\n  \"password\": \"PostmanPass123\",\n  \"email\": \"postman@test.com\"\n}"
+            }
+          }
+        },
+        {
+          "name": "2. Login (capture access + refresh tokens)",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "var json = pm.response.json();",
+                "pm.collectionVariables.set('gatewayToken', json.token);"
+              ]
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "url": "{{authUrl}}/api/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"postman_user\",\n  \"password\": \"PostmanPass123\",\n  \"email\": \"postman@test.com\"\n}"
+            }
+          }
+        },
+        {
+          "name": "3. Refresh Token",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "url": "{{authUrl}}/api/auth/refresh",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"PLACEHOLDER_USE_LOGIN_REFRESH_TOKEN\"\n}"
+            }
+          }
+        },
+        {
+          "name": "4. Create API Key (capture raw key - SAVE IT!)",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "var json = pm.response.json();",
+                "pm.collectionVariables.set('apiKeyRaw', json.key);",
+                "console.log('====================================');",
+                "console.log('SAVE THIS API KEY (shown once):');",
+                "console.log(json.key);",
+                "console.log('====================================');"
+              ]
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{gatewayToken}}"}
+            ],
+            "url": "{{authUrl}}/api/auth/keys",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"postman-test-key\"\n}"
+            }
+          }
+        },
+        {
+          "name": "5. List My API Keys",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{gatewayToken}}"}],
+            "url": "{{authUrl}}/api/auth/keys"
+          }
+        },
+        {
+          "name": "6. Get My Audit Logs",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{gatewayToken}}"}],
+            "url": "{{authUrl}}/api/auth/audit?page=0&size=10"
+          }
+        }
+      ]
+    },
+    {
+      "name": "━━━ MODULE 1: METADATA (Buckets) ━━━",
+      "item": [
+        {
+          "name": "1. List All Buckets (GET)",
+          "request": {
+            "method": "GET",
+            "url": "{{metadataUrl}}/api/v1/buckets"
+          }
+        },
+        {
+          "name": "2. Create Bucket (POST) - capture bucketId",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "var json = pm.response.json();",
+                "pm.collectionVariables.set('bucketId', json.id);"
+              ]
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "url": "{{metadataUrl}}/api/v1/buckets",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{bucketName}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "3. Get Bucket by ID (GET)",
+          "request": {
+            "method": "GET",
+            "url": "{{metadataUrl}}/api/v1/buckets/{{bucketId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "━━━ MODULE 2: PLACEMENT (Node Selection) ━━━",
+      "item": [
+        {
+          "name": "1. Get Next Placement Node",
+          "request": {
+            "method": "GET",
+            "url": "{{placementUrl}}/api/v1/placement/next"
+          }
+        },
+        {
+          "name": "2. Get Multiple Placement Nodes (Anti-affinity)",
+          "request": {
+            "method": "GET",
+            "url": "{{placementUrl}}/api/v1/placement/next/multiple?count=3"
+          }
+        },
+        {
+          "name": "3. Cluster Status (All Nodes)",
+          "request": {
+            "method": "GET",
+            "url": "{{placementUrl}}/api/v1/cluster/status"
+          }
+        },
+        {
+          "name": "4. List Eligible Storage Nodes",
+          "request": {
+            "method": "GET",
+            "url": "{{placementUrl}}/api/v1/cluster/nodes/eligible"
+          }
+        },
+        {
+          "name": "5. Node Status by ID",
+          "request": {
+            "method": "GET",
+            "url": "{{placementUrl}}/api/v1/cluster/nodes/storage-node-1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "━━━ MODULE 3: STORAGE (Upload/Download/Delete) ━━━",
+      "item": [
+        {
+          "name": "1. Upload File to Bucket (PUT - binary)",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "var json = pm.response.json();",
+                "pm.collectionVariables.set('objectId', json.objectId);"
+              ]
+            }
+          }],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {"key": "Content-Type", "value": "application/octet-stream"},
+              {"key": "Authorization", "value": "Bearer {{gatewayToken}}"}
+            ],
+            "url": "{{gatewayUrl}}/api/v1/buckets/{{bucketId}}/objects/postman-test.txt",
+            "body": {
+              "mode": "file",
+              "file": {"src": "/tmp/postman-upload.txt"}
+            }
+          }
+        },
+        {
+          "name": "2. List Objects in Bucket",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{gatewayToken}}"}],
+            "url": "{{metadataUrl}}/api/v1/buckets/{{bucketId}}/objects"
+          }
+        },
+        {
+          "name": "3. Download Object (Gateway -> Download Service)",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{gatewayToken}}"}],
+            "url": "{{gatewayUrl}}/api/v1/objects/{{objectId}}"
+          }
+        },
+        {
+          "name": "4. Get Object Metadata",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{gatewayToken}}"}],
+            "url": "{{metadataUrl}}/api/v1/objects/{{objectId}}"
+          }
+        },
+        {
+          "name": "5. Get Chunk Locations for Object",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{gatewayToken}}"}],
+            "url": "{{metadataUrl}}/internal/v1/objects/{{objectId}}/chunk-locations"
+          }
+        },
+        {
+          "name": "6. Delete Object (Soft Delete via Gateway -> Metadata)",
+          "request": {
+            "method": "DELETE",
+            "header": [{"key": "Authorization", "value": "Bearer {{gatewayToken}}"}],
+            "url": "{{metadataUrl}}/api/v1/objects/{{objectId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "━━━ MODULE 4B: CLI (End-to-End via Bash) ━━━",
+      "item": [
+        {
+          "name": "CLI: Auth Login (requires CLI install at cli/build/install/astra/bin/astra)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{gatewayUrl}}/",
+            "description": "Documented reference — execute in terminal:\n./cli/build/install/astra/bin/astra auth login -u postman@test.com --password=PostmanPass123"
+          }
+        },
+        {
+          "name": "CLI: List Buckets",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{gatewayUrl}}/",
+            "description": "Run: ./cli/build/install/astra/bin/astra ls-buckets"
+          }
+        },
+        {
+          "name": "CLI: Cluster Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{gatewayUrl}}/",
+            "description": "Run: ./cli/build/install/astra/bin/astra cluster health"
+          }
+        },
+        {
+          "name": "CLI: Interactive Shell",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{gatewayUrl}}/",
+            "description": "Run: echo -e 'ls-buckets\\ncluster health\\nquit' | ./cli/build/install/astra/bin/astra shell --no-banner"
+          }
+        }
+      ]
+    }
+  ]
+}
