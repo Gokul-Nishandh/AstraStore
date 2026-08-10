@@ -10,41 +10,47 @@ spring:
           uri: http://auth:8081
           predicates:
             - Path=/api/auth/**
-        # Upload Service (PUT object)
+
+        # Upload Service (PUT object by bucket/key) - must be before metadata to take precedence
         - id: upload-route
           uri: http://upload:8082
           predicates:
             - Path=/api/v1/buckets/{bucketId}/objects/{*key}
             - Method=PUT
 
-        # Download Service (GET/HEAD object)
-        - id: download-by-key-route
-          uri: http://download:8083
-          predicates:
-            - Path=/api/v1/buckets/{bucketId}/objects/{*key}
-            - Method=GET
+        # Download Service (GET/HEAD object by objectId)
         - id: download-by-id-route
           uri: http://download:8083
           predicates:
             - Path=/api/v1/objects/{objectId}
             - Method=GET,HEAD
 
-        # Download
+        # Download Service (GET/HEAD object by bucket/key - non-greedy match)
+        - id: download-by-key-route
+          uri: http://download:8083
+          predicates:
+            - Path=/api/v1/buckets/{bucketId}/objects/{key:.+}
+            - Method=GET
+
+        # Download (legacy path)
         - id: download-route
           uri: http://download:8083
           predicates:
             - Path=/api/download/**
           filters:
             - RewritePath=/api/download/(?<segment>.*), /$\{segment}
-        # Metadata (Buckets & Objects)
-        - id: bucket-metadata-route
+
+        # Metadata (Buckets & Objects listing) - GET only
+        - id: bucket-metadata-list-route
           uri: http://metadata:8084
           predicates:
             - Path=/api/v1/buckets/**
+            - Method=GET
         - id: object-metadata-route
           uri: http://metadata:8084
           predicates:
             - Path=/api/v1/objects/**
+            - Method=GET
 
         # Placement
         - id: placement-route

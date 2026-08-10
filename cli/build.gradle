@@ -1,0 +1,65 @@
+// ============================================================
+//  cli — AstraStore command line tool
+//
+//  Responsibilities:
+//    - User authentication (login/logout/API key management)
+//    - File operations (upload/download/list/delete)
+//    - Cluster health & healing inspection
+//    - Bucket management
+// ============================================================
+plugins {
+    id 'java'
+    id 'application'
+}
+
+description = 'AstraStore CLI Tool'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Logging
+    implementation 'org.slf4j:slf4j-simple:2.0.13'
+
+    // CLI framework - Picocli for argument parsing and ANSI colors
+    implementation 'info.picocli:picocli:4.7.6'
+    annotationProcessor 'info.picocli:picocli-codegen:4.7.6'
+
+    // HTTP client
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+
+    // JSON processing
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.17.2'
+    implementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.17.2'
+
+    // BouncyCastle for credential encryption (AES-256-GCM)
+    implementation 'org.bouncycastle:bcprov-jdk18on:1.78'
+
+    // Progress bar
+    implementation 'me.tongfei:progressbar:0.10.1'
+
+    // Lombok
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+
+    // Tests
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.11.0'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+application {
+    mainClass = 'com.astrastore.cli.Main'
+    applicationName = 'astra'
+}
+
+tasks.named('jar') {
+    manifest {
+        attributes 'Main-Class': application.mainClass.get()
+    }
+}
+
+// Build distributable distribution with bin/astra script
+tasks.named('startScripts') {
+    applicationName = 'astra'
+}
