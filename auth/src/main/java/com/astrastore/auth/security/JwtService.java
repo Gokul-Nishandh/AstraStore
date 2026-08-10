@@ -1,3 +1,8 @@
+/**
+ * Generates and validates JWT access and refresh tokens using HS256.
+ * Supports separate token types (ACCESS, REFRESH) with type-aware validation.
+ * Configurable expiry via jwt.expiration-ms and jwt.refresh-expiration-ms.
+ */
 package com.astrastore.auth.security;
 
 import io.jsonwebtoken.*;
@@ -15,68 +20,91 @@ import java.util.function.Function;
 
 /**
  * Service for generating and validating JWT tokens.
- * Uses HS256 signing with a configurable secret.
+ * Supports separate access and refresh token types.
  */
 @Service
 public class JwtService {
+
+    public enum TokenType {
+        ACCESS, REFRESH
+    }
 
     @Value("${jwt.secret}")
     private String secret;
 
     @Value("${jwt.expiration-ms:86400000}")
-    private long expirationMs;
+    private long accessExpirationMs;
 
-    /**
-     * Extracts the username (subject) from a token.
-     */
+    @Value("${jwt.refresh-expiration-ms:604800000}")
+    private long refreshExpirationMs;
+
     public String extractUsername(String token) {
         return extractClaim(token, Claims::getSubject);
     }
 
-    /**
-     * Extracts a specific claim from a token.
-     */
+    public TokenType extractTokenType(String token) {
+        String type = extractClaim(token, c -> c.get("type", String.class));
+        return type != null ? TokenType.valueOf(type) : TokenType.ACCESS;
+    }
+
     public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
         final Claims claims = extractAllClaims(token);
         return claimsResolver.apply(claims);
     }
 
-    /**
-     * Generates a token for the given user, including roles as extra claims.
-     */
-    public String generateToken(UserDetails userDetails) {
+    public String generateAccessToken(UserDetails userDetails) {
         Map<String, Object> extraClaims = new HashMap<>();
         userDetails.getAuthorities().forEach(auth ->
             extraClaims.put("roles", auth.getAuthority())
         );
-        return generateToken(extraClaims, userDetails);
+        extraClaims.put("type", TokenType.ACCESS.name());
+        return buildToken(extraClaims, userDetails.getUsername(), accessExpirationMs);
     }
 
-    /**
-     * Generates a token with arbitrary extra claims.
-     */
-    public String generateToken(Map<String, Object> extraClaims, UserDetails userDetails) {
+    public String generateRefreshToken(UserDetails userDetails) {
+        Map<String, Object> extraClaims = new HashMap<>();
+        extraClaims.put("type", TokenType.REFRESH.name());
+        return buildToken(extraClaims, userDetails.getUsername(), refreshExpirationMs);
+    }
+
+    public String generateRefreshToken(Long userId) {
+        Map<String, Object> extraClaims = new HashMap<>();
+        extraClaims.put("type", TokenType.REFRESH.name());
+        extraClaims.put("userId", userId);
+        return buildToken(extraClaims, String.valueOf(userId), refreshExpirationMs);
+    }
+
+    private String buildToken(Map<String, Object> extraClaims, String subject, long expirationMs) {
         return Jwts.builder()
                 .claims(extraClaims)
-                .subject(userDetails.getUsername())
+                .subject(subject)
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + expirationMs))
                 .signWith(getSigningKey(), Jwts.SIG.HS256)
                 .compact();
     }
 
-    /**
-     * Validates a token against a {@link UserDetails} instance.
-     */
+    public boolean isAccessTokenValid(String token, UserDetails userDetails) {
+        return extractTokenType(token) == TokenType.ACCESS
+                && isTokenValid(token, userDetails);
+    }
+
+    public boolean isRefreshTokenValid(String token, UserDetails userDetails) {
+        return extractTokenType(token) == TokenType.REFRESH
+                && isTokenValid(token, userDetails);
+    }
+
     public boolean isTokenValid(String token, UserDetails userDetails) {
         final String username = extractUsername(token);
         return username.equals(userDetails.getUsername()) && !isTokenExpired(token);
     }
 
-    // ---- private helpers ----
-
-    private boolean isTokenExpired(String token) {
-        return extractExpiration(token).before(new Date());
+    public boolean isTokenExpired(String token) {
+        try {
+            return extractExpiration(token).before(new Date());
+        } catch (ExpiredJwtException e) {
+            return true;
+        }
     }
 
     private Date extractExpiration(String token) {
