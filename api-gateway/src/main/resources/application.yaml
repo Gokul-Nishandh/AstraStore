@@ -47,7 +47,7 @@ spring:
           filters:
             - RewritePath=/api/download/(?<segment>.*), /$\{segment}
 
-        # Metadata (Buckets - POST for creation, GET for listing)
+        # Metadata (Buckets - POST for create, GET for list, DELETE for remove)
         - id: bucket-metadata-write-route
           uri: http://metadata:8084
           predicates:
@@ -57,7 +57,7 @@ spring:
           uri: http://metadata:8084
           predicates:
             - Path=/api/v1/buckets/**
-            - Method=GET
+            - Method=GET,DELETE
         - id: object-metadata-route
           uri: http://metadata:8084
           predicates:

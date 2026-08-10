@@ -22,10 +22,16 @@ public class PersistenceConfig {
 
     @Bean
     public UserDetailsService userDetailsService() {
-        return username -> userRepository.findByUsername(username)
-                .or(() -> userRepository.findByEmail(username))
-                .orElseThrow(() -> new UsernameNotFoundException(
-                        "User not found: " + username));
+        return username -> {
+            java.util.List<com.astrastore.auth.entity.User> users = userRepository.findAllByUsernameOrEmail(username, username);
+            if (users.isEmpty()) {
+                throw new UsernameNotFoundException("User not found: " + username);
+            }
+            if (users.size() > 1) {
+                throw new UsernameNotFoundException("Multiple users match: " + username);
+            }
+            return users.get(0);
+        };
     }
 
     @Bean
