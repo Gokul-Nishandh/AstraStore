@@ -25,6 +25,13 @@ spring:
             - Path=/api/v1/objects/{objectId}
             - Method=GET,HEAD
 
+        # Object DELETE -> metadata service (soft-delete)
+        - id: object-delete-route
+          uri: http://metadata:8084
+          predicates:
+            - Path=/api/v1/objects/{objectId}
+            - Method=DELETE
+
         # Download Service (GET/HEAD object by bucket/key - non-greedy match)
         - id: download-by-key-route
           uri: http://download:8083
@@ -40,7 +47,12 @@ spring:
           filters:
             - RewritePath=/api/download/(?<segment>.*), /$\{segment}
 
-        # Metadata (Buckets & Objects listing) - GET only
+        # Metadata (Buckets - POST for creation, GET for listing)
+        - id: bucket-metadata-write-route
+          uri: http://metadata:8084
+          predicates:
+            - Path=/api/v1/buckets
+            - Method=POST
         - id: bucket-metadata-list-route
           uri: http://metadata:8084
           predicates:

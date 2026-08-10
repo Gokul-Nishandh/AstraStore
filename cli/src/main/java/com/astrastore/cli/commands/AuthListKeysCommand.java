@@ -29,6 +29,9 @@ import java.util.concurrent.Callable;
 )
 public class AuthListKeysCommand implements Callable<Integer> {
 
+    @CommandLine.Option(names = {"--output"}, description = "Output format: table (default) or json")
+    private String output = "table";
+
     @Override
     public Integer call() {
         CredentialStore.Credentials creds;
@@ -58,6 +61,11 @@ public class AuthListKeysCommand implements Callable<Integer> {
             System.out.println("──────────────");
             DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
                     .withZone(ZoneId.systemDefault());
+
+            if ("json".equalsIgnoreCase(output)) {
+                System.out.println(client.getMapper().writeValueAsString(keys));
+                return 0;
+            }
 
             for (KeyResponse key : keys) {
                 System.out.println("  ID:          " + key.getId());
