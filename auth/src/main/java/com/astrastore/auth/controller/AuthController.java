@@ -90,7 +90,7 @@ public class AuthController {
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow();
 
-        String token = jwtService.generateToken(user);
+        String token = jwtService.generateAccessToken(user);
 
         AuthResponse response = AuthResponse.builder()
                 .token(token)
