@@ -1,3 +1,23 @@
+/**
+ * Central Spring Security configuration.
+ *
+ * Authentication strategy: stateless JWT.
+ * Sessions are disabled; every request must carry a valid Bearer token.
+ *
+ * Endpoints:
+ *   POST /api/auth/register   — public (new user registration)
+ *   POST /api/auth/login      — public (returns JWT + refresh token)
+ *   POST /api/auth/refresh    — public (exchanges refresh token for new JWT)
+ *   POST /api/auth/logout     — authenticated (revokes refresh token)
+ *   /api/auth/keys/**         — authenticated (API key CRUD)
+ *   /api/auth/audit/**        — authenticated (view own audit logs)
+ *   /actuator/health          — public (health checks)
+ *   /actuator/**             — public (metrics & prometheus)
+ *   all other requests        — require any authenticated user
+ *
+ * Note: UserDetailsService and PasswordEncoder are defined in
+ * PersistenceConfig to avoid circular dependency issues.
+ */
 package com.astrastore.auth.config;
 
 import com.astrastore.auth.security.JwtAuthenticationFilter;
@@ -19,22 +39,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
-/**
- * Central Spring Security configuration.
- *
- * Authentication strategy: stateless JWT.
- * Sessions are disabled; every request must carry a valid Bearer token.
- *
- * Endpoints:
- *   POST /api/auth/register   — public (new user registration)
- *   POST /api/auth/login      — public (returns JWT)
- *   /actuator/health          — public (health checks)
- *   /actuator/**             — public (metrics & prometheus)
- *   all other requests        — require any authenticated user
- *
- * Note: UserDetailsService and PasswordEncoder are defined in
- * PersistenceConfig to avoid circular dependency issues.
- */
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
@@ -54,9 +58,12 @@ public class SecurityConfig {
                 session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
             )
             .authorizeHttpRequests(auth -> auth
-                // Public endpoints
-                .requestMatchers("/api/auth/register", "/api/auth/login").permitAll()
+                // Public endpoints (token in body, not header)
+                .requestMatchers("/api/auth/register", "/api/auth/login", "/api/auth/refresh", "/api/auth/logout").permitAll()
                 .requestMatchers("/actuator/**").permitAll()
+                // Authenticated user endpoints (require Bearer token in header)
+                .requestMatchers("/api/auth/keys/**").authenticated()
+                .requestMatchers("/api/auth/audit/**").authenticated()
                 // Everything else requires authentication
                 .anyRequest().authenticated()
             )

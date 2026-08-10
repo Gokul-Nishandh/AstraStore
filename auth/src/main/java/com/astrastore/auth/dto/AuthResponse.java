@@ -1,3 +1,8 @@
+/**
+ * Response payload returned after login or token refresh.
+ * Contains access token, optional refresh token, and user identity.
+ * The refreshToken field is only populated on login and refresh endpoints.
+ */
 package com.astrastore.auth.dto;
 
 import lombok.AllArgsConstructor;
@@ -7,9 +12,6 @@ import lombok.NoArgsConstructor;
 
 import java.util.Set;
 
-/**
- * Response payload returned after a successful login or registration.
- */
 @Data
 @Builder
 @NoArgsConstructor
@@ -17,7 +19,8 @@ import java.util.Set;
 public class AuthResponse {
 
     private String token;
-    private String type;       // always "Bearer"
+    private String type;
+    private String refreshToken;
     private Long userId;
     private String username;
     private String email;

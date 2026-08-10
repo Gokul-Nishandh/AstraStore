@@ -22,9 +22,10 @@ public class PersistenceConfig {
 
     @Bean
     public UserDetailsService userDetailsService() {
-        return username -> userRepository.findByEmail(username)
+        return username -> userRepository.findByUsername(username)
+                .or(() -> userRepository.findByEmail(username))
                 .orElseThrow(() -> new UsernameNotFoundException(
-                        "User not found with email: " + username));
+                        "User not found: " + username));
     }
 
     @Bean
