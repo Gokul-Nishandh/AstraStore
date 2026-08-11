@@ -1,5 +1,5 @@
 /**
- * Parent command for auth operations (login, logout, status, key management).
+ * Parent command for auth operations (login, logout, status, key management, audit log).
  * Delegates to nested subcommands for specific operations.
  */
 package com.astrastore.cli.commands;
@@ -16,7 +16,8 @@ import picocli.CommandLine;
                 AuthStatusCommand.class,
                 AuthCreateKeyCommand.class,
                 AuthListKeysCommand.class,
-                AuthRevokeKeyCommand.class
+                AuthRevokeKeyCommand.class,
+                AuthAuditCommand.class
         }
 )
 public class AuthCommand implements Runnable {
