@@ -69,7 +69,7 @@ public class RemoveBucketCommand implements Callable<Integer> {
             if (e.getMessage() != null && e.getMessage().contains("409")) {
                 System.err.println("Error: bucket is not empty. Delete all objects first.");
             } else {
-                System.err.println("Failed to remove bucket: " + e.getMessage());
+                ErrorHandler.printError(e);
             }
             return 1;
         }

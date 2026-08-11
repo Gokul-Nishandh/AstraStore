@@ -62,12 +62,11 @@ public class MakeBucketCommand implements Callable<Integer> {
             System.out.println("  Owner:     " + response.ownerId);
             System.out.println("  Created:   " + response.createdAt);
             return 0;
+        } catch (com.astrastore.cli.exception.ApiException e) {
+            System.err.println(com.astrastore.cli.ui.ErrorParser.friendlyMessage(e));
+            return 1;
         } catch (Exception e) {
-            if (e.getMessage() != null && e.getMessage().contains("409")) {
-                System.err.println("Error: bucket name '" + name + "' already exists");
-            } else {
-                System.err.println("Failed to create bucket: " + e.getMessage());
-            }
+            ErrorHandler.printError(e);
             return 1;
         }
     }

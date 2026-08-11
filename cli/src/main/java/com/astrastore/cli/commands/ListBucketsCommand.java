@@ -79,7 +79,7 @@ public class ListBucketsCommand implements Callable<Integer> {
             }
             return 0;
         } catch (Exception e) {
-            System.err.println("Failed to list buckets: " + e.getMessage());
+            ErrorHandler.printError(e);
             return 1;
         }
     }

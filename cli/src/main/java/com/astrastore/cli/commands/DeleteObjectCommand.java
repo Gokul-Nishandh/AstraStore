@@ -66,7 +66,7 @@ public class DeleteObjectCommand implements Callable<Integer> {
             System.out.println("✓ Object " + objectId + " deleted.");
             return 0;
         } catch (Exception e) {
-            System.err.println("Failed to delete object: " + e.getMessage());
+            ErrorHandler.printError(e);
             return 1;
         }
     }

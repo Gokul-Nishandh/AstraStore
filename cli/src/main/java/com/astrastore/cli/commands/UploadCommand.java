@@ -123,7 +123,7 @@ public class UploadCommand implements Callable<Integer> {
                 return 0;
             }
         } catch (IOException e) {
-            System.err.println("Upload failed: " + e.getMessage());
+            ErrorHandler.printError(e);
             return 1;
         }
     }

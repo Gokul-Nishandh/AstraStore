@@ -79,7 +79,7 @@ public class DownloadCommand implements Callable<Integer> {
         try (Response response = httpClient.newCall(request).execute()) {
             if (!response.isSuccessful()) {
                 String body = response.body() != null ? response.body().string() : "";
-                System.err.println("Download failed: HTTP " + response.code() + " " + body);
+                ErrorHandler.printError(new com.astrastore.cli.exception.ApiException(response.code(), request.url().encodedPath(), body));
                 return 1;
             }
 
@@ -108,7 +108,7 @@ public class DownloadCommand implements Callable<Integer> {
             System.out.println("✓ Downloaded " + formatSize(outFile.length()) + " to " + outFile.getAbsolutePath());
             return 0;
         } catch (IOException e) {
-            System.err.println("Download failed: " + e.getMessage());
+            ErrorHandler.printError(e);
             return 1;
         }
     }

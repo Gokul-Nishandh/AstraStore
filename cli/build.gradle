@@ -39,6 +39,10 @@ dependencies {
     // Progress bar
     implementation 'me.tongfei:progressbar:0.10.1'
 
+    // jline3 for interactive terminal prompts (arrow-key selection, history)
+    implementation 'org.jline:jline:3.27.0'
+    implementation 'org.jline:jline-terminal-jna:3.27.0'
+
     // Lombok
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
