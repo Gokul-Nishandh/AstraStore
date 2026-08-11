@@ -11,7 +11,8 @@ include(
         "monitoring",
         "storage-node",
         "astrastore-shared",
-        "cli"
+        "cli",
+        "sdk-java"
 )
 
 project(":api-gateway").name    = "api-gateway"
@@ -25,3 +26,4 @@ project(":monitoring").name     = "monitoring"
 project(":storage-node").name    = "storage-node"
 project(":astrastore-shared").name = "astrastore-shared"
 project(":cli").name            = "cli"
+project(":sdk-java").name       = "sdk-java"
