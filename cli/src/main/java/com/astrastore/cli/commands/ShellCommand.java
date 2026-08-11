@@ -5,19 +5,25 @@
  *  - Line editing (left/right arrows, backspace, delete)
  *  - Persistent history saved to ~/.astra/history
  * Shows a contextual prompt with the logged-in user when available.
+ *
+ * Supports two command types:
+ *  1. astra commands: "ls-buckets", "mb -n foo", "upload ./file -b <id> -k key"
+ *  2. Shell passthrough: "ls", "cat file", "cd /tmp" (executed via /bin/sh)
  */
 package com.astrastore.cli.commands;
 
 import com.astrastore.cli.auth.CredentialStore;
 import com.astrastore.cli.ui.ColorSupport;
+import org.jline.reader.EndOfFileException;
 import org.jline.reader.LineReader;
 import org.jline.reader.LineReaderBuilder;
 import org.jline.reader.UserInterruptException;
-import org.jline.reader.EndOfFileException;
 import org.jline.terminal.Terminal;
 import org.jline.terminal.TerminalBuilder;
 import picocli.CommandLine;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.concurrent.Callable;
@@ -32,13 +38,19 @@ public class ShellCommand implements Callable<Integer> {
     @CommandLine.Option(names = {"--no-banner"}, description = "Skip the welcome banner")
     private boolean noBanner;
 
+    @CommandLine.Option(names = {"--no-passthrough"},
+            description = "Disable shell command passthrough (astra-only)")
+    private boolean noPassthrough;
+
     @CommandLine.Spec
     CommandLine.Model.CommandSpec spec;
 
     @Override
     public Integer call() throws Exception {
         if (!noBanner) {
-            System.out.println(ColorSupport.cyan("astra shell") + " — type 'help' for commands, 'quit' to exit");
+            System.out.println(ColorSupport.cyan("astra shell") +
+                    " — type 'help' for astra commands, 'quit' to exit");
+            System.out.println("             shell commands (ls, cat, etc.) also work via passthrough");
             System.out.println();
         }
 
@@ -74,13 +86,27 @@ public class ShellCommand implements Callable<Integer> {
                 line = line.trim();
                 if (line.isEmpty()) continue;
                 if (isExitCommand(line)) break;
+
                 if (line.equals("help") || line.equals("--help") || line.equals("-h")) {
                     cmd.usage(System.out);
                     continue;
                 }
 
+                if (line.equals("clear") || line.equals("cls")) {
+                    System.out.print("\u001B[H\u001B[2J");
+                    System.out.flush();
+                    continue;
+                }
+
+                if (!noPassthrough && shouldPassthrough(line)) {
+                    runShellPassthrough(line);
+                    continue;
+                }
+
+                String cmdLine = line.startsWith("astra ") ? line.substring(5).trim() : line;
+
                 try {
-                    int rc = cmd.execute(line.split("\\s+"));
+                    int rc = cmd.execute(cmdLine.split("\\s+"));
                     if (rc != 0 && rc != 2) {
                         System.err.println("(exit code " + rc + ")");
                     }
@@ -94,12 +120,59 @@ public class ShellCommand implements Callable<Integer> {
             }
         } finally {
             if (terminal != null) {
-                try { terminal.close(); } catch (Exception ignored) {}
+                try {
+                    terminal.close();
+                } catch (Exception ignored) {
+                }
             }
         }
 
         System.out.println("Goodbye.");
         return 0;
+    }
+
+    private boolean isAstraCommand(String line) {
+        java.util.Set<String> astra = java.util.Set.of(
+                "auth", "upload", "download", "ls", "rm", "mb", "rb", "ls-buckets",
+                "cluster", "shell", "help", "quit", "exit", "q"
+        );
+        String first = line.split("\\s+")[0].toLowerCase();
+        return astra.contains(first);
+    }
+
+    private boolean looksLikeShellPath(String s) {
+        return s.startsWith("/") || s.startsWith("~") || s.startsWith("./")
+                || s.startsWith("../") || s.contains("*") || s.contains("?")
+                || s.startsWith("$");
+    }
+
+    private boolean shouldPassthrough(String line) {
+        if (line.startsWith("astra ")) return false;
+        if (isExitCommand(line)) return false;
+        if (line.equals("help") || line.equals("--help") || line.equals("-h")) return false;
+        if (line.equals("clear") || line.equals("cls")) return false;
+        if (isAstraCommand(line)) {
+            String[] parts = line.split("\\s+", 2);
+            if (parts.length > 1 && looksLikeShellPath(parts[1])) {
+                return true;
+            }
+            return false;
+        }
+        return true;
+    }
+
+    private void runShellPassthrough(String line) {
+        try {
+            ProcessBuilder pb = new ProcessBuilder("/bin/sh", "-c", line);
+            pb.inheritIO();
+            Process p = pb.start();
+            int rc = p.waitFor();
+            if (rc != 0) {
+                System.err.println("(shell exit code " + rc + ")");
+            }
+        } catch (Exception e) {
+            System.err.println(ColorSupport.error("Shell error: " + e.getMessage()));
+        }
     }
 
     private String buildPrompt() {
