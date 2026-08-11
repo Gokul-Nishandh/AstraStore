@@ -89,16 +89,18 @@ public class DownloadCommand implements Callable<Integer> {
             BufferedSink sink = Okio.buffer(fileSink);
 
             if (!noProgress && System.console() != null && contentLength > 0) {
-                ProgressTracker tracker = new ProgressTracker(contentLength);
+                com.astrastore.cli.ui.ProgressRenderer renderer =
+                        new com.astrastore.cli.ui.ProgressRenderer(outFile.getName(), contentLength);
                 Source counted = new ForwardingSource(source) {
                     @Override
                     public long read(okio.Buffer sinkBuf, long byteCount) throws IOException {
                         long read = super.read(sinkBuf, byteCount);
-                        tracker.update(read);
+                        renderer.update(read);
                         return read;
                     }
                 };
                 sink.writeAll(counted);
+                renderer.finish();
             } else {
                 sink.writeAll(source);
             }
@@ -133,28 +135,5 @@ public class DownloadCommand implements Callable<Integer> {
         if (bytes < 1024 * 1024) return String.format("%.1f KB", bytes / 1024.0);
         if (bytes < 1024L * 1024 * 1024) return String.format("%.1f MB", bytes / (1024.0 * 1024));
         return String.format("%.2f GB", bytes / (1024.0 * 1024 * 1024));
-    }
-
-    private static class ProgressTracker {
-        private final long total;
-        private long downloaded = 0;
-        private long lastPrint = 0;
-        private static final long PRINT_INTERVAL = 524288L;
-
-        ProgressTracker(long total) {
-            this.total = total;
-            System.out.print("\r  Progress: 0%");
-        }
-
-        void update(long bytesRead) {
-            if (bytesRead > 0) {
-                downloaded += bytesRead;
-                if (downloaded - lastPrint >= PRINT_INTERVAL || downloaded == total) {
-                    int percent = total > 0 ? (int) ((downloaded * 100) / total) : 0;
-                    System.out.print("\r  Progress: " + percent + "%");
-                    lastPrint = downloaded;
-                }
-            }
-        }
     }
 }
