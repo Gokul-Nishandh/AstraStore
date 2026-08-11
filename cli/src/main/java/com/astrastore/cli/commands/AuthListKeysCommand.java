@@ -53,7 +53,16 @@ public class AuthListKeysCommand implements Callable<Integer> {
             List<KeyResponse> keys = client.get("/api/auth/keys", new TypeReference<List<KeyResponse>>() {});
 
             if (keys == null || keys.isEmpty()) {
-                System.out.println("No active API keys. Run 'astra auth create-key' to create one.");
+                if ("json".equalsIgnoreCase(output)) {
+                    System.out.println("[]");
+                } else {
+                    System.out.println("No active API keys. Run 'astra auth create-key' to create one.");
+                }
+                return 0;
+            }
+
+            if ("json".equalsIgnoreCase(output)) {
+                System.out.println(client.getMapper().writeValueAsString(keys));
                 return 0;
             }
 
@@ -61,11 +70,6 @@ public class AuthListKeysCommand implements Callable<Integer> {
             System.out.println("──────────────");
             DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
                     .withZone(ZoneId.systemDefault());
-
-            if ("json".equalsIgnoreCase(output)) {
-                System.out.println(client.getMapper().writeValueAsString(keys));
-                return 0;
-            }
 
             for (KeyResponse key : keys) {
                 System.out.println("  ID:          " + key.getId());
