@@ -26,6 +26,7 @@ public class BucketController {
     private static final UUID DEFAULT_OWNER_ID = UUID.nameUUIDFromBytes("default-owner".getBytes());
 
     private final BucketService bucketService;
+    private final com.astrastore.metadata.repository.BucketRepository bucketRepository;
     private final ObjectService objectService;
 
     @PostMapping
@@ -51,6 +52,21 @@ public class BucketController {
             @PathVariable UUID bucketId) {
 
         Bucket bucket = bucketService.getBucket(bucketId);
+
+        return ResponseEntity.ok(toResponse(bucket));
+    }
+
+    /**
+     * Look up a bucket by its human-readable name (used by CLI path-targeting).
+     * Returns 404 if no bucket with that name exists.
+     */
+    @GetMapping("/by-name/{name}")
+    public ResponseEntity<BucketResponse> getBucketByName(
+            @PathVariable String name) {
+
+        Bucket bucket = bucketRepository.findByName(name)
+                .orElseThrow(() -> new com.astrastore.metadata.exception.BucketNotFoundException(
+                        "Bucket not found: " + name));
 
         return ResponseEntity.ok(toResponse(bucket));
     }

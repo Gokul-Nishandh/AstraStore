@@ -20,4 +20,6 @@ public interface BucketRepository extends JpaRepository<Bucket, UUID> {
     Page<Bucket> findByOwnerId(UUID ownerId, Pageable pageable);
 
     boolean existsByOwnerIdAndName(UUID ownerId, String name);
+
+    Optional<Bucket> findByName(String name);
 }
