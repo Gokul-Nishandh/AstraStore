@@ -59,7 +59,7 @@ public class AuthRevokeKeyCommand implements Callable<Integer> {
             System.out.println("✓ API key " + keyId + " revoked successfully.");
             return 0;
         } catch (Exception e) {
-            System.err.println("Failed to revoke key: " + e.getMessage());
+            ErrorHandler.printError(e);
             return 1;
         }
     }

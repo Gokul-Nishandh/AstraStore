@@ -89,7 +89,7 @@ public class ClusterHealthCommand implements Callable<Integer> {
             }
             return 0;
         } catch (Exception e) {
-            System.err.println("Failed to fetch cluster health: " + e.getMessage());
+            ErrorHandler.printError(e);
             return 1;
         }
     }

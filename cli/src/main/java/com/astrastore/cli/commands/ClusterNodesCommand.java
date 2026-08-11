@@ -83,7 +83,7 @@ public class ClusterNodesCommand implements Callable<Integer> {
             }
             return 0;
         } catch (Exception e) {
-            System.err.println("Failed to list nodes: " + e.getMessage());
+            ErrorHandler.printError(e);
             return 1;
         }
     }

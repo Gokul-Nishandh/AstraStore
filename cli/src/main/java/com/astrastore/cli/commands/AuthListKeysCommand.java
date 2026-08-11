@@ -92,7 +92,7 @@ public class AuthListKeysCommand implements Callable<Integer> {
             }
             return 0;
         } catch (Exception e) {
-            System.err.println("Failed to list API keys: " + e.getMessage());
+            ErrorHandler.printError(e);
             return 1;
         }
     }

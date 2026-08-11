@@ -61,7 +61,8 @@ public class AstraHttpClient {
         Request request = baseRequest(path).delete().build();
         try (Response response = httpClient.newCall(request).execute()) {
             if (!response.isSuccessful()) {
-                throw new ApiException("DELETE " + path + " failed: " + response.code());
+                String errorBody = response.body() != null ? response.body().string() : "";
+                throw new ApiException(response.code(), path, errorBody);
             }
         }
     }
@@ -73,7 +74,7 @@ public class AstraHttpClient {
         try (Response response = httpClient.newCall(request).execute()) {
             if (!response.isSuccessful()) {
                 String errorBody = response.body() != null ? response.body().string() : "";
-                throw new ApiException("POST " + path + " failed: " + response.code() + " " + errorBody);
+                throw new ApiException(response.code(), path, errorBody);
             }
         }
     }
@@ -82,7 +83,7 @@ public class AstraHttpClient {
         try (Response response = httpClient.newCall(request).execute()) {
             String body = response.body() != null ? response.body().string() : "";
             if (!response.isSuccessful()) {
-                throw new ApiException("HTTP " + response.code() + " " + response.message() + ": " + body);
+                throw new ApiException(response.code(), request.url().encodedPath(), body);
             }
             if (body.isEmpty() || typeRef == null) {
                 return null;
