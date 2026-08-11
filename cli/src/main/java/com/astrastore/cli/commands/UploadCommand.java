@@ -9,6 +9,8 @@ package com.astrastore.cli.commands;
 import com.astrastore.cli.auth.CredentialStore;
 import com.astrastore.cli.config.AstraConfig;
 import com.astrastore.cli.http.AstraHttpClient;
+import com.astrastore.cli.ui.ErrorParser;
+import com.astrastore.cli.ui.ResourceResolver;
 import com.fasterxml.jackson.core.type.TypeReference;
 import me.tongfei.progressbar.ProgressBar;
 import me.tongfei.progressbar.ProgressBarBuilder;
@@ -39,8 +41,9 @@ public class UploadCommand implements Callable<Integer> {
     @CommandLine.Parameters(index = "0", description = "Local file to upload", paramLabel = "FILE")
     private File file;
 
-    @CommandLine.Option(names = {"-b", "--bucket"}, description = "Destination bucket ID (UUID)", required = true)
-    private String bucketId;
+    @CommandLine.Option(names = {"-b", "--bucket"},
+            description = "Destination bucket: UUID, name, or s3://name (omit for picker)", required = true)
+    private String bucketRef;
 
     @CommandLine.Option(names = {"-k", "--key"}, description = "Object key (defaults to filename)")
     private String key;
@@ -55,13 +58,22 @@ public class UploadCommand implements Callable<Integer> {
             return 1;
         }
 
+        AstraConfig config = AstraConfig.load();
+        AstraHttpClient client = new AstraHttpClient(config.getGatewayUrl());
+
         UUID bucketUuid;
-        try {
-            bucketUuid = UUID.fromString(bucketId);
-        } catch (IllegalArgumentException e) {
-            System.err.println("Error: --bucket must be a valid UUID. Use 'astra ls-buckets' to find it.");
+        if (bucketRef == null || bucketRef.isBlank()) {
+            System.err.println("Error: --bucket is required. Use 'astra ls-buckets' to find a bucket.");
             return 1;
         }
+        ResourceResolver.ResolvedBucket resolvedBucket = ResourceResolver.resolveBucket(bucketRef, client);
+        if (resolvedBucket == null) {
+            System.err.println(ErrorParser.friendlyMessage(
+                    new com.astrastore.cli.exception.ApiException(404, "/api/v1/buckets/" + bucketRef,
+                            "Bucket not found: " + bucketRef)));
+            return 1;
+        }
+        bucketUuid = resolvedBucket.uuid();
 
         CredentialStore.Credentials creds;
         try {
@@ -76,11 +88,10 @@ public class UploadCommand implements Callable<Integer> {
         }
 
         String objectKey = (key != null && !key.isBlank()) ? key : file.getName();
-        AstraConfig config = AstraConfig.load();
         String uploadUrl = config.getGatewayUrl() + "/api/v1/buckets/" + bucketUuid + "/objects/" + objectKey;
 
         long fileSize = file.length();
-        System.out.println("Uploading " + file.getName() + " (" + formatSize(fileSize) + ") to " + bucketId + "/" + objectKey);
+        System.out.println("Uploading " + file.getName() + " (" + formatSize(fileSize) + ") to " + bucketRef + "/" + objectKey);
 
         try {
             OkHttpClient httpClient = new OkHttpClient.Builder()

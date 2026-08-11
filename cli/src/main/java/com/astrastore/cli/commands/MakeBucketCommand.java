@@ -28,6 +28,16 @@ public class MakeBucketCommand implements Callable<Integer> {
     @CommandLine.Option(names = {"-n", "--name"}, description = "Bucket name", required = true)
     private String name;
 
+    @CommandLine.Option(names = {"-q", "--quiet"},
+            description = "Quiet mode: print only the new bucket ID.",
+            scope = CommandLine.ScopeType.INHERIT)
+    private boolean quiet = false;
+
+    @CommandLine.Option(names = {"--output"},
+            description = "Output format: table (default) or json.",
+            scope = CommandLine.ScopeType.INHERIT)
+    private String output = "table";
+
     @CommandLine.Option(names = {"--owner-id"}, description = "Owner UUID (optional, defaults to system)")
     private String ownerId;
 
@@ -56,11 +66,17 @@ public class MakeBucketCommand implements Callable<Integer> {
             BucketRequest request = new BucketRequest(name, ownerId);
             BucketResponse response = client.post("/api/v1/buckets", request, new TypeReference<>() {});
 
-            System.out.println("✓ Bucket created");
-            System.out.println("  Name:      " + response.name);
-            System.out.println("  ID:        " + response.id);
-            System.out.println("  Owner:     " + response.ownerId);
-            System.out.println("  Created:   " + response.createdAt);
+            if (quiet) {
+                System.out.println(response.id);
+            } else if ("json".equalsIgnoreCase(output)) {
+                System.out.println(client.getMapper().writeValueAsString(response));
+            } else {
+                System.out.println("✓ Bucket created");
+                System.out.println("  Name:      " + response.name);
+                System.out.println("  ID:        " + response.id);
+                System.out.println("  Owner:     " + response.ownerId);
+                System.out.println("  Created:   " + response.createdAt);
+            }
             return 0;
         } catch (com.astrastore.cli.exception.ApiException e) {
             System.err.println(com.astrastore.cli.ui.ErrorParser.friendlyMessage(e));
