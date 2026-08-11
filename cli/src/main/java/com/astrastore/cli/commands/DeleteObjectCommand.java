@@ -18,8 +18,8 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import picocli.CommandLine;
 
 import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+
+
 import java.util.stream.Collectors;
 import java.util.concurrent.Callable;
 
@@ -54,7 +54,7 @@ public class DeleteObjectCommand implements Callable<Integer> {
         AstraConfig config = AstraConfig.load();
         AstraHttpClient client = new AstraHttpClient(config.getGatewayUrl());
 
-        UUID resolvedId = null;
+        String resolvedObjectId = null;
         String resolvedKey = null;
 
         if (objectRef == null || objectRef.isBlank()) {
@@ -82,24 +82,33 @@ public class DeleteObjectCommand implements Callable<Integer> {
                 return 1;
             }
             List<String> objLabels = objects.stream()
-                    .map(o -> o.key() + "  (" + o.bucketUuid() + ")")
+                    .map(o -> o.key() + "  (ID: " + o.objectId() + ")")
                     .collect(Collectors.toList());
             int oIdx = ConsolePrompter.selectSingle("Select an object to delete (Use arrow keys):", objLabels);
             if (oIdx < 0) {
                 System.out.println("Cancelled.");
                 return 0;
             }
-            resolvedId = objects.get(oIdx).bucketUuid();
+            resolvedObjectId = objects.get(oIdx).objectId();
             resolvedKey = objects.get(oIdx).key();
         } else {
-            ResourceResolver.ResolvedObject obj = ResourceResolver.resolveObject(objectRef, client);
-            if (obj == null) {
-                System.err.println(ErrorParser.friendlyMessage(
-                        new ApiException(404, "/api/v1/objects/" + objectRef, "Object not found: " + objectRef)));
-                return 1;
+            // If objectRef is already a UUID, use it directly.
+            // NOTE: GET /api/v1/objects/{uuid} via the gateway routes to the download service
+            // (binary stream response), not the metadata service, so we cannot use it
+            // to resolve metadata. The DELETE endpoint goes to metadata and is correct.
+            if (isUuid(objectRef)) {
+                resolvedObjectId = objectRef;
+                resolvedKey = objectRef; // Use UUID as display key; no metadata lookup needed
+            } else {
+                ResourceResolver.ResolvedObject obj = ResourceResolver.resolveObject(objectRef, client);
+                if (obj == null) {
+                    System.err.println(ErrorParser.friendlyMessage(
+                            new ApiException(404, "/api/v1/objects/" + objectRef, "Object not found: " + objectRef)));
+                    return 1;
+                }
+                resolvedObjectId = obj.objectId();
+                resolvedKey = obj.key();
             }
-            resolvedId = obj.bucketUuid();
-            resolvedKey = obj.key();
         }
 
         if (!skipConfirm) {
@@ -115,7 +124,7 @@ public class DeleteObjectCommand implements Callable<Integer> {
         }
 
         try {
-            client.delete("/api/v1/objects/" + resolvedId);
+            client.delete("/api/v1/objects/" + resolvedObjectId);
             System.out.println("✓ Object " + resolvedKey + " deleted.");
             return 0;
         } catch (ApiException e) {
@@ -124,6 +133,17 @@ public class DeleteObjectCommand implements Callable<Integer> {
         } catch (Exception e) {
             ErrorHandler.printError(e);
             return 1;
+        }
+    }
+
+    /** Returns true if the given string is a valid UUID. */
+    private static boolean isUuid(String s) {
+        if (s == null || s.length() != 36) return false;
+        try {
+            java.util.UUID.fromString(s);
+            return true;
+        } catch (IllegalArgumentException e) {
+            return false;
         }
     }
 }

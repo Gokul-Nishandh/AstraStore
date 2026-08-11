@@ -6,12 +6,13 @@
  */
 package com.astrastore.cli.ui;
 
+import java.io.IOException;
+import java.util.List;
+
+import org.jline.terminal.Attributes;
 import org.jline.terminal.Terminal;
 import org.jline.terminal.TerminalBuilder;
 import org.jline.utils.NonBlockingReader;
-
-import java.io.IOException;
-import java.util.List;
 
 public final class ConsolePrompter {
 
@@ -61,67 +62,100 @@ public final class ConsolePrompter {
 
     private static int selectWithJLine(String prompt, List<String> options) {
         Terminal terminal = null;
+        Attributes originalAttributes = null;
         try {
             terminal = TerminalBuilder.builder()
                     .system(true)
                     .jna(false)
                     .jansi(false)
                     .build();
+
+            // CRITICAL FIX: Enter raw mode so arrow keypresses are read immediately
+            originalAttributes = terminal.enterRawMode();
             NonBlockingReader reader = terminal.reader();
+
             int selected = 0;
             int lastDrawnLines = 0;
 
             System.out.println(ColorSupport.cyan(prompt));
-            drawMenu(options, selected, lastDrawnLines);
+            lastDrawnLines = drawMenu(options, selected);
 
             while (true) {
                 int ch = reader.read();
-                if (ch == -1) return -1;
+                if (ch == -1) {
+                    clearMenu(lastDrawnLines);
+                    return -1;
+                }
 
+                // ENTER key
                 if (ch == 10 || ch == 13) {
                     clearMenu(lastDrawnLines);
+                    // Render final selection statically
+                    System.out.println("  " + ColorSupport.green("✓ Selected: " + options.get(selected)));
                     return selected;
                 }
+
+                // ESC Sequences (Arrow Keys)
                 if (ch == 27) {
                     int ch2 = reader.read();
                     if (ch2 == '[' || ch2 == 'O') {
                         int code = reader.read();
-                        if (code == 'A') {
-                            selected = Math.max(0, selected - 1);
-                        } else if (code == 'B') {
-                            selected = Math.min(options.size() - 1, selected + 1);
+                        if (code == 'A') { // UP
+                            selected = (selected > 0) ? selected - 1 : options.size() - 1;
+                        } else if (code == 'B') { // DOWN
+                            selected = (selected < options.size() - 1) ? selected + 1 : 0;
                         }
                         clearMenu(lastDrawnLines);
-                        lastDrawnLines = drawMenu(options, selected, 0);
+                        lastDrawnLines = drawMenu(options, selected);
+                        continue;
                     }
                 }
-                if (ch == 'q' || ch == 'Q' || ch == 3) {
+
+                // Quit / Cancel
+                if (ch == 'q' || ch == 'Q' || ch == 3) { // 3 = Ctrl+C
                     clearMenu(lastDrawnLines);
                     return -1;
                 }
-                if (ch == 'j') {
-                    selected = Math.min(options.size() - 1, selected + 1);
+
+                // Vim Keybindings (k = UP, j = DOWN)
+                if (ch == 'k' || ch == 'K') {
+                    selected = (selected > 0) ? selected - 1 : options.size() - 1;
                     clearMenu(lastDrawnLines);
-                    lastDrawnLines = drawMenu(options, selected, 0);
+                    lastDrawnLines = drawMenu(options, selected);
+                } else if (ch == 'j' || ch == 'J') {
+                    selected = (selected < options.size() - 1) ? selected + 1 : 0;
+                    clearMenu(lastDrawnLines);
+                    lastDrawnLines = drawMenu(options, selected);
                 }
-                if (ch == 'k') {
-                    selected = Math.max(0, selected - 1);
-                    clearMenu(lastDrawnLines);
-                    lastDrawnLines = drawMenu(options, selected, 0);
+
+                // Direct Number Selection (1-9)
+                if (ch >= '1' && ch <= '9') {
+                    int index = ch - '1';
+                    if (index < options.size()) {
+                        selected = index;
+                        clearMenu(lastDrawnLines);
+                        lastDrawnLines = drawMenu(options, selected);
+                    }
                 }
             }
         } catch (IOException e) {
             return selectFromStdin(prompt, options);
         } finally {
             if (terminal != null) {
-                try { terminal.close(); } catch (IOException ignored) {}
+                if (originalAttributes != null) {
+                    terminal.setAttributes(originalAttributes); // Restore original TTY mode
+                }
+                try {
+                    terminal.close();
+                } catch (IOException ignored) {
+                }
             }
         }
     }
 
-    private static int drawMenu(List<String> options, int selected, int startLine) {
+    private static int drawMenu(List<String> options, int selected) {
         for (int i = 0; i < options.size(); i++) {
-            String marker = (i == selected) ? "❯" : "  ";
+            String marker = (i == selected) ? "❯" : " ";
             String color = (i == selected) ? ColorSupport.GREEN : ColorSupport.DIM;
             String line = "  " + color + marker + " " + options.get(i) + ColorSupport.RESET;
             System.out.println(line);
@@ -133,9 +167,8 @@ public final class ConsolePrompter {
         if (lines <= 0) return;
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < lines; i++) {
-            sb.append("\u001B[1A");
-            sb.append("\u001B[2K");
-            if (i < lines - 1) sb.append("\u001B[1A");
+            sb.append("\u001B[1A"); // Move cursor UP 1 line
+            sb.append("\u001B[2K"); // Clear entire line
         }
         System.out.print(sb.toString());
         System.out.flush();
