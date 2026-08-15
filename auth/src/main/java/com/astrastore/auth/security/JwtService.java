@@ -5,9 +5,11 @@
  */
 package com.astrastore.auth.security;
 
+import com.astrastore.auth.entity.User;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
@@ -15,15 +17,33 @@ import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 
 /**
  * Service for generating and validating JWT tokens.
- * Supports separate access and refresh token types.
+ *
+ * <p>The access tokens produced here are read by every other service through
+ * {@code com.astrastore.shared.security.JwtTokenVerifier}, which needs five
+ * things: the {@code ACCESS} type marker, a numeric {@code userId}, a
+ * {@code username}, an {@code email}, and {@code roles} as a JSON <em>array</em>
+ * of bare role names.
+ *
+ * <p>The previous implementation wrote roles with
+ * {@code authorities.forEach(a -> claims.put("roles", a.getAuthority()))},
+ * which overwrote the claim on every iteration and left a single role behind
+ * as a bare string — and never wrote the identity claims at all. A user with
+ * both ADMIN and USER arrived downstream holding whichever role the iterator
+ * happened to yield last, so admin authorisation was effectively random.
  */
 @Service
 public class JwtService {
+
+    /** HS256 needs at least 256 bits of key material, same floor as the verifier. */
+    private static final int MIN_SECRET_BYTES = 32;
 
     public enum TokenType {
         ACCESS, REFRESH
@@ -52,13 +72,39 @@ public class JwtService {
         return claimsResolver.apply(claims);
     }
 
+    /**
+     * Builds an access token carrying the full identity of the caller.
+     *
+     * <p>{@code roles} is always a {@code List<String>} of bare names, even
+     * when the user holds exactly one role — a scalar would be silently
+     * tolerated by the verifier today and is the shape that caused the bug.
+     */
     public String generateAccessToken(UserDetails userDetails) {
         Map<String, Object> extraClaims = new HashMap<>();
-        userDetails.getAuthorities().forEach(auth ->
-            extraClaims.put("roles", auth.getAuthority())
-        );
         extraClaims.put("type", TokenType.ACCESS.name());
+        extraClaims.put("roles", bareRoles(userDetails));
+
+        if (userDetails instanceof User user) {
+            extraClaims.put("userId", user.getId());
+            extraClaims.put("username", user.getUsername());
+            extraClaims.put("email", user.getEmail());
+        }
         return buildToken(extraClaims, userDetails.getUsername(), accessExpirationMs);
+    }
+
+    /**
+     * The bare role names behind a UserDetails' authorities, deduplicated and
+     * in a stable order.
+     */
+    private static List<String> bareRoles(UserDetails userDetails) {
+        Set<String> roles = new LinkedHashSet<>();
+        for (GrantedAuthority authority : userDetails.getAuthorities()) {
+            String bare = Roles.stripPrefix(authority.getAuthority());
+            if (bare != null && !bare.isBlank()) {
+                roles.add(bare);
+            }
+        }
+        return List.copyOf(roles);
     }
 
     public String generateRefreshToken(UserDetails userDetails) {
@@ -96,7 +142,9 @@ public class JwtService {
 
     public boolean isTokenValid(String token, UserDetails userDetails) {
         final String username = extractUsername(token);
-        return username.equals(userDetails.getUsername()) && !isTokenExpired(token);
+        return username != null
+                && username.equals(userDetails.getUsername())
+                && !isTokenExpired(token);
     }
 
     public boolean isTokenExpired(String token) {
@@ -120,7 +168,16 @@ public class JwtService {
     }
 
     private SecretKey getSigningKey() {
+        if (secret == null || secret.isBlank()) {
+            throw new IllegalStateException(
+                    "JWT secret is not configured. Set the JWT_SECRET environment variable.");
+        }
         byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
+        if (keyBytes.length < MIN_SECRET_BYTES) {
+            throw new IllegalStateException(
+                    "JWT secret must be at least " + MIN_SECRET_BYTES
+                            + " bytes for HS256; got " + keyBytes.length + ".");
+        }
         return Keys.hmacShaKeyFor(keyBytes);
     }
 }

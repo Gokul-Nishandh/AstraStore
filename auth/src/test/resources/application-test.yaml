@@ -22,10 +22,18 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.H2Dialect
 
-  # Disable Redis auto-configuration for unit tests
+  # Redis auto-configuration stays on: it is what supplies the
+  # StringRedisTemplate that RefreshTokenService requires, and Lettuce opens
+  # no socket until something actually reads a key, so the context loads
+  # without a Redis server. Excluding it left the bean missing and every
+  # @SpringBootTest failed before reaching its first assertion.
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
   autoconfigure:
     exclude:
-      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
       - org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration
 
   # Disable Kafka completely

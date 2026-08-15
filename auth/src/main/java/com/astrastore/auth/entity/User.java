@@ -45,7 +45,6 @@ public class User implements UserDetails {
     @Column(nullable = false, unique = true)
     private String email;
 
-    @NotBlank
     @Size(min = 60, max = 60) // BCrypt hash length
     @Column(nullable = false)
     private String password;
@@ -68,6 +67,14 @@ public class User implements UserDetails {
 
     @Column(name = "updated_at")
     private Instant updatedAt;
+
+    /**
+     * Last successful interactive login. Nullable: rows that existed before
+     * this column was added, and accounts that have never logged in, simply
+     * have no value — the admin console renders that as "never".
+     */
+    @Column(name = "last_login_at")
+    private Instant lastLoginAt;
 
     @PrePersist
     protected void onCreate() {

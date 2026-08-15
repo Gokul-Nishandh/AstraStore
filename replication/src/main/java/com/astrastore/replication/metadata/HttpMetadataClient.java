@@ -1,6 +1,8 @@
 package com.astrastore.replication.metadata;
 
 import com.astrastore.replication.db.MockChunkDatabase;
+import com.astrastore.shared.security.InternalServiceToken;
+import com.astrastore.shared.security.InternalServiceTokenInterceptor;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -39,10 +41,12 @@ public class HttpMetadataClient implements MetadataClient {
     public HttpMetadataClient(
             MockChunkDatabase mockChunkDatabase,
             ObjectMapper objectMapper,
-            @Value("${services.metadata-url:http://metadata:8084}") String metadataServiceUrl) {
+            @Value("${services.metadata-url:http://metadata:8084}") String metadataServiceUrl,
+            InternalServiceToken serviceToken) {
         this.mockChunkDatabase = mockChunkDatabase;
         this.metadataServiceUrl = metadataServiceUrl;
         this.restTemplate = new RestTemplate(new JdkClientHttpRequestFactory());
+        this.restTemplate.getInterceptors().add(new InternalServiceTokenInterceptor(serviceToken));
     }
 
     @Override

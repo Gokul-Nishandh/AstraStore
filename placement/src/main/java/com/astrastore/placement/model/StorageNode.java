@@ -4,6 +4,7 @@ import lombok.Builder;
 import lombok.Getter;
 
 import java.time.Instant;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -17,6 +18,14 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * <p>Immutable fields ({@code nodeId}, {@code baseUrl}) are set at construction
  * time and never change for the lifetime of this entry.</p>
+ *
+ * <h2>Capacity model</h2>
+ * <p>Capacity is the node's <em>configured quota</em>, reported by the node
+ * itself, and usage is the bytes it has genuinely written. These are the only
+ * per-node figures that mean anything when added up: the host filesystem is
+ * shared by every container in a local stack, so summing it counts one drive
+ * three times. {@code hostDiskFreeBytes} is kept purely as an operational
+ * warning signal and is deliberately never aggregated.</p>
  */
 @Getter
 @Builder
@@ -81,45 +90,82 @@ public class StorageNode {
     private final AtomicInteger activeConnections = new AtomicInteger(0);
 
     // ----------------------------------------------------------------
-    // Disk capacity metrics — updated on every successful heartbeat
+    // Capacity metrics — updated on every successful heartbeat
     // ----------------------------------------------------------------
 
-    /** Total disk space on this node in bytes (as reported by the node). */
+    /**
+     * Whether this node has ever reported quota-based capacity.
+     *
+     * <p>Until it has, the figures below are placeholders and must not be
+     * folded into any cluster total — a zero would silently shrink the
+     * cluster's reported size rather than admitting the data is missing.
+     */
     @Builder.Default
-    private final AtomicLong diskTotalBytes = new AtomicLong(0L);
+    private final AtomicBoolean capacityReported = new AtomicBoolean(false);
 
-    /** Available (usable) disk space in bytes. */
+    /** Bytes this node is configured to hold (its quota). */
     @Builder.Default
-    private final AtomicLong diskFreeBytes = new AtomicLong(0L);
+    private final AtomicLong capacityBytes = new AtomicLong(0L);
 
-    /** Bytes currently used for storage. */
+    /** Bytes this node has actually stored. */
     @Builder.Default
-    private final AtomicLong diskUsedBytes = new AtomicLong(0L);
+    private final AtomicLong usedBytes = new AtomicLong(0L);
+
+    /** Remaining quota, floored at zero. */
+    @Builder.Default
+    private final AtomicLong availableBytes = new AtomicLong(0L);
+
+    /** Number of chunk files held by this node. */
+    @Builder.Default
+    private final AtomicLong chunkCount = new AtomicLong(0L);
+
+    /**
+     * Free space on the node's underlying filesystem.
+     *
+     * <p>Advisory only, and shared between every node on a single host.
+     * Never sum this across nodes.
+     */
+    @Builder.Default
+    private final AtomicLong hostDiskFreeBytes = new AtomicLong(0L);
 
     // ----------------------------------------------------------------
     // Convenience accessors
     // ----------------------------------------------------------------
 
     /**
-     * Calculates the fraction of disk space that is used.
+     * Fraction of this node's quota that is in use.
      *
-     * @return value in [0.0, 1.0], or 0.0 if total is unknown.
+     * @return value in [0.0, ∞), or 0.0 if the quota is unknown.
      */
-    public double getDiskUsedRatio() {
-        long total = diskTotalBytes.get();
-        if (total == 0L) return 0.0;
-        return (double) diskUsedBytes.get() / total;
+    public double getUsedRatio() {
+        long capacity = capacityBytes.get();
+        if (capacity <= 0L) return 0.0;
+        return (double) usedBytes.get() / capacity;
     }
 
     /**
-     * Calculates the fraction of disk space that is free.
+     * Fraction of this node's quota that is still free — the capacity term in
+     * the placement score.
      *
-     * @return value in [0.0, 1.0], or 1.0 if total is unknown (safe default).
+     * @return value in [0.0, 1.0], or 1.0 if the quota is unknown (safe default:
+     *         an unreported node is not preferentially avoided).
      */
+    public double getFreeRatio() {
+        long capacity = capacityBytes.get();
+        if (capacity <= 0L) return 1.0;
+        return (double) availableBytes.get() / capacity;
+    }
+
+    /** @deprecated use {@link #getFreeRatio()} — kept for existing callers. */
+    @Deprecated
     public double getDiskFreeRatio() {
-        long total = diskTotalBytes.get();
-        if (total == 0L) return 1.0;
-        return (double) diskFreeBytes.get() / total;
+        return getFreeRatio();
+    }
+
+    /** @deprecated use {@link #getUsedRatio()} — kept for existing callers. */
+    @Deprecated
+    public double getDiskUsedRatio() {
+        return getUsedRatio();
     }
 
     /**
@@ -137,7 +183,8 @@ public class StorageNode {
                 "nodeId='" + nodeId + '\'' +
                 ", baseUrl='" + baseUrl + '\'' +
                 ", state=" + state.get() +
-                ", diskFreeRatio=" + String.format("%.2f", getDiskFreeRatio()) +
+                ", used=" + usedBytes.get() + "/" + capacityBytes.get() + "B" +
+                ", chunks=" + chunkCount.get() +
                 ", failures=" + consecutiveFailures.get() +
                 ", lastSeen=" + lastSeen.get() +
                 '}';

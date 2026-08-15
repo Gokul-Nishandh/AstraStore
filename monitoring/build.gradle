@@ -1,9 +1,10 @@
 // ============================================================
-//  monitoring — Health monitoring & metrics service
+//  monitoring — Service availability & uptime history
 //
 //  Responsibilities:
-//    - Aggregates /actuator/prometheus from all services
-//    - Kafka consumer for system-level events
+//    - Probes every service's actuator health on a fixed interval
+//    - Persists one sample per probe and an incident per UP/DOWN transition
+//    - Serves uptime, downtime and incident history to the dashboard
 //    - Exposes Prometheus metrics endpoint
 // ============================================================
 plugins {
@@ -28,19 +29,40 @@ dependencyManagement {
 }
 
 dependencies {
+    // Spring Boot core
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
-    implementation 'io.micrometer:micrometer-registry-prometheus'
 
-    // Micrometer → OpenTelemetry tracing bridge
-    implementation 'io.micrometer:micrometer-tracing-bridge-otel'
+    // Platform security: AstraPrincipal, JwtTokenVerifier, AstraResourceServerConfig
+    // and the shared ApiError envelope.
+    implementation project(':astrastore-shared')
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+
+    // Lombok — reduces boilerplate (Getter, Builder, @Slf4j, etc.)
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+
+    // Persistence — probe samples and incident history
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    runtimeOnly    'org.postgresql:postgresql'
 
     // Kafka consumer for system-level events
     implementation 'org.springframework.kafka:spring-kafka'
 
+    // Micrometer → OpenTelemetry tracing bridge
+    implementation 'io.micrometer:micrometer-tracing-bridge-otel'
+
+    // Micrometer Prometheus
+    implementation 'io.micrometer:micrometer-registry-prometheus'
+
+    // Tests
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.security:spring-security-test'
     testRuntimeOnly    'org.junit.platform:junit-platform-launcher'
+    // H2 in-memory DB for unit/integration tests (Postgres in production)
+    testRuntimeOnly    'com.h2database:h2'
+    testImplementation 'com.h2database:h2'
 }
 
 bootRun {

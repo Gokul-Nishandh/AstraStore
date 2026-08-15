@@ -1,5 +1,7 @@
 package com.astrastore.upload.client;
 
+import com.astrastore.shared.security.InternalServiceToken;
+import com.astrastore.shared.security.InternalServiceTokenInterceptor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -24,8 +26,10 @@ public class MetadataClient {
     private final String metadataServiceUrl;
 
     public MetadataClient(
-            @Value("${services.metadata-url:http://localhost:8084}") String metadataServiceUrl) {
+            @Value("${services.metadata-url:http://localhost:8084}") String metadataServiceUrl,
+            InternalServiceToken serviceToken) {
         this.restTemplate = new RestTemplate();
+        this.restTemplate.getInterceptors().add(new InternalServiceTokenInterceptor(serviceToken));
         this.metadataServiceUrl = metadataServiceUrl;
     }
 

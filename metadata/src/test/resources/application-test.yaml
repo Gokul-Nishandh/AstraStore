@@ -35,3 +35,14 @@ spring:
 management:
   endpoints:
     enabled-by-default: false
+
+# Deterministic signing secret for tests (>= 256 bits, as HS256 requires).
+jwt:
+  secret: astrastore_test_jwt_secret_key_that_is_long_enough_for_hs256
+
+astrastore:
+  internal:
+    # Blank on purpose: the open mode is part of what the suite exercises, and
+    # the test profile is one of the few where a blank token is permitted.
+    # Tests that assert enforcement override this with a non-blank value.
+    service-token: ""

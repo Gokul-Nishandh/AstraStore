@@ -46,3 +46,11 @@ otel:
 logging:
   level:
     com.astrastore: DEBUG
+
+astrastore:
+  internal:
+    # Shared secret presented to metadata's /internal/v1/** surface, which
+    # bypasses ownership checks. Must match the value metadata is given.
+    # Blank is refused at startup unless a dev/local/test profile is active,
+    # so a real deployment cannot come up unauthenticated.
+    service-token: ${ASTRA_INTERNAL_TOKEN:}

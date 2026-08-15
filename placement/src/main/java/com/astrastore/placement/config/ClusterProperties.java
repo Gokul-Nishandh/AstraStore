@@ -28,6 +28,16 @@ public class ClusterProperties {
      */
     private HeartbeatConfig heartbeat = new HeartbeatConfig();
 
+    /**
+     * How many copies of each chunk the cluster keeps.
+     *
+     * <p>This is what separates the bytes on disk from the bytes a user
+     * actually stored: at a factor of 2, a 1 GB upload consumes 2 GB of
+     * cluster capacity. Reporting only one of those two numbers is how a
+     * capacity dashboard ends up misleading.
+     */
+    private int replicationFactor = 2;
+
     // ----------------------------------------------------------------
 
     /**

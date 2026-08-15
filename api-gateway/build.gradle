@@ -34,6 +34,18 @@ dependencies {
     implementation 'org.springframework.cloud:spring-cloud-starter-gateway'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
 
+    // Redis (reactive) — backs RequestRateLimiter (NFR-006) and the
+    // short-lived API-key validation cache. Lettuce connects lazily, so a
+    // missing Redis degrades the gateway rather than stopping it booting.
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis-reactive'
+
+    // Circuit breaker + fallback so one dead downstream cannot hang the UI
+    implementation 'org.springframework.cloud:spring-cloud-starter-circuitbreaker-reactor-resilience4j'
+
+    // Shared identity/error contracts: JwtTokenVerifier, AstraHeaders, ApiError.
+    // JwtTokenVerifier is deliberately Spring-free so it works in WebFlux.
+    implementation project(':astrastore-shared')
+
     // Micrometer Prometheus
     implementation 'io.micrometer:micrometer-registry-prometheus'
 
@@ -42,6 +54,7 @@ dependencies {
 
     // Tests
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'io.projectreactor:reactor-test'
     testRuntimeOnly    'org.junit.platform:junit-platform-launcher'
 }
 

@@ -8,6 +8,7 @@ import com.astrastore.replication.config.ConcurrencyManager;
 import com.astrastore.replication.metadata.MetadataClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -27,7 +28,19 @@ public class ReplicationOrchestrator {
     private final MetadataClient metadataClient;
 
     /**
-     * Replicates a chunk to two additional storage nodes.
+     * Copies to keep per chunk, counting the primary.
+     *
+     * <p>This used to be hardcoded at "two additional nodes", which on a
+     * three-node cluster put every chunk on every node — three copies for a
+     * configured factor of two. Storage filled half again as fast as the
+     * configuration implied, and the capacity figures, which divide raw bytes
+     * by this factor to estimate logical usage, were correspondingly wrong.
+     */
+    @Value("${astrastore.replication-factor:2}")
+    private int replicationFactor;
+
+    /**
+     * Replicates a chunk until it reaches the configured factor.
      *
      * @param event the chunk written event from Kafka
      */
@@ -38,22 +51,33 @@ public class ReplicationOrchestrator {
         log.info("Replication orchestration started — chunkId={}, primary={}",
                 chunkId, primaryNodeIp);
 
-        List<String> targetNodes = placementStrategy.getNextTargetNodes(2, primaryNodeIp);
-
-        if (targetNodes.size() < 2) {
-            log.warn("Not enough target nodes available — chunkId={}, available={}",
-                    chunkId, targetNodes.size());
+        // The primary already holds one copy, so only the remainder is placed.
+        int replicasNeeded = Math.max(0, replicationFactor - 1);
+        if (replicasNeeded == 0) {
+            log.info("Replication factor is 1 — chunkId={} stays on the primary alone", chunkId);
             return;
         }
 
-        String replicaNode1 = targetNodes.get(0);
-        String replicaNode2 = targetNodes.get(1);
+        List<String> targetNodes = placementStrategy.getNextTargetNodes(replicasNeeded, primaryNodeIp);
 
-        replicateToReplica(event, primaryNodeIp, replicaNode1);
-        replicateToReplica(event, primaryNodeIp, replicaNode2);
+        if (targetNodes.isEmpty()) {
+            log.warn("No target node available for replication — chunkId={}", chunkId);
+            return;
+        }
 
-        log.info("Replication orchestration complete — chunkId={}, primary={}, replicas=[{}, {}]",
-                chunkId, primaryNodeIp, replicaNode1, replicaNode2);
+        // Fewer nodes than the factor asks for is a degraded cluster, not a
+        // reason to abandon the copy that can be made.
+        if (targetNodes.size() < replicasNeeded) {
+            log.warn("Under-replicating chunkId={} — wanted {} replicas, {} nodes available",
+                    chunkId, replicasNeeded, targetNodes.size());
+        }
+
+        for (String replicaNode : targetNodes) {
+            replicateToReplica(event, primaryNodeIp, replicaNode);
+        }
+
+        log.info("Replication orchestration complete — chunkId={}, primary={}, replicas={}",
+                chunkId, primaryNodeIp, targetNodes);
     }
 
     private void replicateToReplica(ChunkWrittenEvent event, String primaryNodeIp, String replicaNodeIp) {

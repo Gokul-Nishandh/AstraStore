@@ -23,6 +23,7 @@ public class ChunkStorageService {
     private final StorageConfig storageConfig;
     private final HashService hashService;
     private final AtomicFileWriter atomicFileWriter;
+    private final NodeUsageTracker usageTracker;
 
     /**
      * Stores a chunk and computes its SHA-256 checksum.
@@ -58,6 +59,10 @@ public class ChunkStorageService {
         atomicFileWriter.writeAtomic(new ByteArrayInputStream(data), finalPath);
 
         long size = Files.size(finalPath);
+        // Counted only after the file is durably at its final path, so a
+        // failed write can never inflate the node's reported usage.
+        usageTracker.onChunkStored(size);
+
         log.info("Chunk stored — chunkId={}, checksum={}, size={}", chunkId, checksum, size);
 
         return checksum;
@@ -88,9 +93,15 @@ public class ChunkStorageService {
      */
     public boolean deleteChunk(String chunkId) throws IOException {
         Path path = storageConfig.getFinalPath(chunkId);
+
+        // Size has to be read before the delete; afterwards it is gone and the
+        // usage counter would have nothing to subtract.
+        long size = Files.exists(path) ? Files.size(path) : 0L;
+
         boolean deleted = atomicFileWriter.delete(path);
         if (deleted) {
-            log.info("Chunk deleted — chunkId={}", chunkId);
+            usageTracker.onChunkDeleted(size);
+            log.info("Chunk deleted — chunkId={}, freedBytes={}", chunkId, size);
         }
         return deleted;
     }

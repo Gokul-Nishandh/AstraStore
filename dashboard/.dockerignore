@@ -1,0 +1,11 @@
+# Keep the build context small and force a clean `npm ci` inside the image.
+node_modules
+dist
+dist-ssr
+.vite
+*.log
+.git
+.gitignore
+Dockerfile
+.dockerignore
+README.md

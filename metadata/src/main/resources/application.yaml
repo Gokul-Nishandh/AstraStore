@@ -39,8 +39,37 @@ spring:
       properties:
         enable.idempotence: true
 
+  # Never let Spring's default whitelabel/servlet error body escape: every
+  # failure is rendered by GlobalExceptionHandler as an ApiError envelope.
+  mvc:
+    throw-exception-if-no-handler-found: true
+  web:
+    resources:
+      add-mappings: false
+
 server:
   port: 8084
+  error:
+    include-message: never
+    include-stacktrace: never
+    include-binding-errors: never
+    include-exception: false
+    whitelabel:
+      enabled: false
+
+# JWT verification — the same signing secret every AstraStore service holds.
+# Must match auth/src/main/resources/application.yaml.
+jwt:
+  secret: ${JWT_SECRET:astrastore_jwt_secret_key_change_in_production_min_256_bits}
+
+astrastore:
+  internal:
+    # Shared secret guarding /internal/v1/**, which bypasses ownership checks.
+    # The same value must be set on upload, download and replication, which
+    # present it. Blank is refused at startup unless a dev/local/test profile
+    # is active, so a real deployment cannot come up unauthenticated.
+    # METADATA_INTERNAL_TOKEN is the superseded name, still honoured.
+    service-token: ${ASTRA_INTERNAL_TOKEN:${METADATA_INTERNAL_TOKEN:}}
 
 # Actuator & Observability
 management:

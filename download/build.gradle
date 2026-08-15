@@ -39,6 +39,10 @@ dependencies {
     // Micrometer Prometheus
     implementation 'io.micrometer:micrometer-registry-prometheus'
 
+    // Shared error envelope, headers, and the internal service-token
+    // interceptor this service uses to call metadata's /internal surface.
+    implementation project(':astrastore-shared')
+
     // Lombok — reduces boilerplate (Getter, Builder, etc.)
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'

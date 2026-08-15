@@ -148,6 +148,12 @@ services:
       - "8080:8080"
     environment:
       SPRING_APPLICATION_NAME: api-gateway
+      # The edge rate limiters are Redis-backed. Without this the gateway
+      # falls back to localhost, every rate-limited route fails closed, and
+      # registration and login answer 503 while the services behind them are
+      # perfectly healthy.
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PORT: "6379"
       MANAGEMENT_TRACING_SAMPLING_PROBABILITY: "1.0"
       MANAGEMENT_PROMETHEUS_METRICS_EXPORT_ENABLED: "true"
       MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: always
@@ -155,8 +161,12 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
       OTEL_METRICS_EXPORTER: none
     depends_on:
-      - auth
-      - monitoring
+      auth:
+        condition: service_started
+      monitoring:
+        condition: service_started
+      redis:
+        condition: service_healthy
     networks:
       - astrastore
 
@@ -170,6 +180,9 @@ services:
       - "8081:8081"
     environment:
       SPRING_APPLICATION_NAME: auth-service
+      # Presented by the gateway when it asks this service to resolve an API
+      # key to an identity. Same value as every other service.
+      ASTRA_INTERNAL_TOKEN: ${ASTRA_INTERNAL_TOKEN:-dev-only-not-for-production}
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/astrastore
       SPRING_DATASOURCE_USERNAME: astrastore
       SPRING_DATASOURCE_PASSWORD: astrastore_secret
@@ -184,7 +197,14 @@ services:
       OTEL_SERVICE_NAME: auth-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
       OTEL_METRICS_EXPORTER: none
-      JWT_SECRET: astrastore_jwt_secret_key_change_in_production_min_256_bits
+      # Signing key for access tokens. Overridden per-environment; the
+      # default here exists only so `docker compose up` works out of the box
+      # on a laptop and must never be used for a real deployment.
+      JWT_SECRET: ${JWT_SECRET:-astrastore_jwt_secret_key_change_in_production_min_256_bits}
+      # Comma-separated emails promoted to ADMIN on startup. Bootstraps the
+      # first administrator, since registration always creates a plain USER.
+      ASTRASTORE_ADMIN_EMAILS: ${ASTRASTORE_ADMIN_EMAILS:-suryapranav55@gmail.com}
+
     depends_on:
       postgres:
         condition: service_healthy
@@ -202,6 +222,7 @@ services:
     ports:
       - "8082:8082"
     environment:
+      ASTRA_INTERNAL_TOKEN: ${ASTRA_INTERNAL_TOKEN:-dev-only-not-for-production}
       SPRING_APPLICATION_NAME: upload-service
       MANAGEMENT_TRACING_SAMPLING_PROBABILITY: "1.0"
       MANAGEMENT_PROMETHEUS_METRICS_EXPORT_ENABLED: "true"
@@ -230,6 +251,7 @@ services:
     ports:
       - "8083:8083"
     environment:
+      ASTRA_INTERNAL_TOKEN: ${ASTRA_INTERNAL_TOKEN:-dev-only-not-for-production}
       SPRING_APPLICATION_NAME: download-service
       MANAGEMENT_TRACING_SAMPLING_PROBABILITY: "1.0"
       MANAGEMENT_PROMETHEUS_METRICS_EXPORT_ENABLED: "true"
@@ -254,6 +276,7 @@ services:
     ports:
       - "8084:8084"
     environment:
+      ASTRA_INTERNAL_TOKEN: ${ASTRA_INTERNAL_TOKEN:-dev-only-not-for-production}
       SPRING_APPLICATION_NAME: metadata-service
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/astrastore
       SPRING_DATASOURCE_USERNAME: astrastore
@@ -308,6 +331,7 @@ services:
     ports:
       - "8086:8086"
     environment:
+      ASTRA_INTERNAL_TOKEN: ${ASTRA_INTERNAL_TOKEN:-dev-only-not-for-production}
       SPRING_APPLICATION_NAME: replication-service
       MANAGEMENT_TRACING_SAMPLING_PROBABILITY: "1.0"
       MANAGEMENT_PROMETHEUS_METRICS_EXPORT_ENABLED: "true"
@@ -333,12 +357,63 @@ services:
       - "8087:8087"
     environment:
       SPRING_APPLICATION_NAME: monitoring-service
+      # Monitoring persists probe samples and incidents, so it needs the same
+      # database the other services use. Without these it silently falls back
+      # to localhost and dies at startup on a refused connection.
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/astrastore
+      SPRING_DATASOURCE_USERNAME: astrastore
+      SPRING_DATASOURCE_PASSWORD: astrastore_secret
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
       MANAGEMENT_TRACING_SAMPLING_PROBABILITY: "1.0"
       MANAGEMENT_PROMETHEUS_METRICS_EXPORT_ENABLED: "true"
       MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: always
       OTEL_SERVICE_NAME: monitoring-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
       OTEL_METRICS_EXPORTER: none
+      # Placement owns the storage-node registry and heartbeat loop;
+      # monitoring reads cluster state from it rather than duplicating it.
+      SERVICES_PLACEMENT_URL: http://placement:8085
+      # Probe targets for the availability tracker. Each entry is
+      # id|display name|base URL; monitoring polls their actuator health.
+      ASTRASTORE_MONITORING_TARGETS: >-
+        gateway|API Gateway|http://api-gateway:8080,
+        auth|Authentication|http://auth:8081,
+        upload|Upload|http://upload:8082,
+        download|Download|http://download:8083,
+        metadata|Metadata|http://metadata:8084,
+        placement|Placement|http://placement:8085,
+        replication|Replication|http://replication:8086,
+        storage-node-1|Storage Node 1|http://storage-node-1:8088,
+        storage-node-2|Storage Node 2|http://storage-node-2:8088,
+        storage-node-3|Storage Node 3|http://storage-node-3:8088
+      ASTRASTORE_MONITORING_PROBE_INTERVAL_MS: "10000"
+    depends_on:
+      - placement
+    networks:
+      - astrastore
+
+  # ---------------------------------------------------------------------------
+  # Dashboard (React SPA served by nginx)
+  # ---------------------------------------------------------------------------
+  # The only service a browser talks to. nginx serves the bundle and
+  # reverse-proxies /api to the gateway, so no internal service needs to
+  # be exposed to the host and there is no cross-origin traffic.
+
+  dashboard:
+    build:
+      context: ./dashboard
+    container_name: astrastore-dashboard
+    ports:
+      - "5173:8080"
+    depends_on:
+      - api-gateway
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/healthz || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
     networks:
       - astrastore
 
@@ -358,6 +433,12 @@ services:
     container_name: astrastore-storage-node-1
     ports:
       - "8088:8088"
+    environment:
+      # Each node reports against its own configured quota and the bytes it
+      # has actually stored. Without this it would report the host filesystem,
+      # so three nodes on one laptop would triple-count the same physical disk.
+      STORAGE_NODE_ID: storage-node-1
+      STORAGE_CAPACITY_BYTES: ${STORAGE_NODE_CAPACITY_BYTES:-21474836480}
     volumes:
       - storage-node-1-data:/data/storage
     healthcheck:
@@ -376,6 +457,9 @@ services:
     container_name: astrastore-storage-node-2
     ports:
       - "8089:8088"
+    environment:
+      STORAGE_NODE_ID: storage-node-2
+      STORAGE_CAPACITY_BYTES: ${STORAGE_NODE_CAPACITY_BYTES:-21474836480}
     volumes:
       - storage-node-2-data:/data/storage
     healthcheck:
@@ -394,6 +478,9 @@ services:
     container_name: astrastore-storage-node-3
     ports:
       - "8090:8088"
+    environment:
+      STORAGE_NODE_ID: storage-node-3
+      STORAGE_CAPACITY_BYTES: ${STORAGE_NODE_CAPACITY_BYTES:-21474836480}
     volumes:
       - storage-node-3-data:/data/storage
     healthcheck:

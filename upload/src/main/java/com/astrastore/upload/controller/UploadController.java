@@ -39,7 +39,17 @@ public class UploadController {
         return ResponseEntity.ok(UploadResponse.fromManifest(manifest));
     }
 
-    @PutMapping(value = "/api/v1/buckets/{bucketId}/objects/{*key}", consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE)
+    /**
+     * Accepts any content type on purpose.
+     *
+     * <p>This is an object store: the bytes are opaque and the declared type
+     * is metadata to be recorded and handed back on download, not a filter.
+     * Restricting {@code consumes} to {@code application/octet-stream} made
+     * Spring answer 415 for every upload a browser labelled honestly — a PDF,
+     * a .docx, a .md — which surfaced to the user as "that file type isn't
+     * supported" for types the platform stores perfectly well.
+     */
+    @PutMapping(value = "/api/v1/buckets/{bucketId}/objects/{*key}")
     public ResponseEntity<UploadResult> putObject(
             @PathVariable UUID bucketId,
             @PathVariable String key,

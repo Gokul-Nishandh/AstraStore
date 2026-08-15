@@ -1,5 +1,6 @@
 package com.astrastore.upload.client;
 
+import com.astrastore.shared.security.InternalServiceToken;
 import com.astrastore.upload.support.FakeHttpResponder;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -12,6 +13,11 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class MetadataClientTest {
+
+    /* A real token, so the interceptor under test actually attaches a header
+       rather than exercising the unauthenticated development path. */
+    private static final InternalServiceToken TEST_TOKEN =
+            InternalServiceToken.resolve("test-internal-token");
 
     private static final UUID OBJECT_ID = UUID.randomUUID();
     private static final UUID BUCKET_ID = UUID.randomUUID();
@@ -52,7 +58,7 @@ class MetadataClientTest {
                 }
                 """.formatted(OBJECT_ID, BUCKET_ID));
 
-        MetadataClient client = new MetadataClient(SERVER.baseUrl());
+        MetadataClient client = new MetadataClient(SERVER.baseUrl(), TEST_TOKEN);
         MetadataClient.CreateObjectRecordRequest request = MetadataClient.CreateObjectRecordRequest.builder()
                 .id(OBJECT_ID)
                 .bucketId(BUCKET_ID)
@@ -80,7 +86,7 @@ class MetadataClientTest {
                 }
                 """.formatted(OBJECT_ID));
 
-        MetadataClient client = new MetadataClient(SERVER.baseUrl());
+        MetadataClient client = new MetadataClient(SERVER.baseUrl(), TEST_TOKEN);
         List<MetadataClient.ChunkLocationItem> chunks = List.of(
                 MetadataClient.ChunkLocationItem.builder()
                         .chunkIndex(0).nodeId("storage-node-1").checksum("a").build(),
