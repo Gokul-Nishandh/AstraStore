@@ -32,9 +32,27 @@ public class Bucket {
     @Column(name = "name", nullable = false, length = 63)
     private String name;
 
+    /**
+     * Legacy owner key. Retained because the {@code (owner_id, name)} unique
+     * constraint and the frontend's {@code Bucket.ownerId} field depend on it.
+     * Derived deterministically from {@link #ownerUserId} — see
+     * {@code com.astrastore.metadata.security.OwnerIds}.
+     */
     @NotNull
     @Column(name = "owner_id", nullable = false)
     private UUID ownerId;
+
+    /**
+     * The real owner key: {@code AstraPrincipal.userId} from the access token.
+     * Every isolation query filters on this column.
+     *
+     * <p>Nullable so rows written before authentication existed still load
+     * under {@code ddl-auto=update}. A null owner matches no caller, so those
+     * rows are invisible rather than public — the safe direction. They need a
+     * one-off backfill to become reachable again.
+     */
+    @Column(name = "owner_user_id")
+    private Long ownerUserId;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)

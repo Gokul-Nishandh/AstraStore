@@ -41,6 +41,23 @@ jwt:
   secret: ${JWT_SECRET:astrastore_jwt_secret_key_change_in_production_min_256_bits}
   expiration-ms: 86400000  # 24 hours
 
+astrastore:
+  internal:
+    # Presented by the gateway when it asks this service to resolve an API key
+    # to an identity. Blank is refused at startup outside a dev/local/test
+    # profile, so a real deployment cannot serve key verification openly.
+    service-token: ${ASTRA_INTERNAL_TOKEN:}
+  auth:
+    # There is no SMTP relay in this deployment, so the reset link is written
+    # to the log instead of mailed. Turning this on additionally returns the
+    # raw token in the POST /api/auth/forgot-password response, which makes
+    # the flow drivable from a test or a local client. It also hands a reset
+    # credential to anyone who can guess an address, so it is off by default
+    # and pinned off under the prod profile below.
+    expose-reset-token: ${ASTRASTORE_AUTH_EXPOSE_RESET_TOKEN:false}
+    reset-token-ttl-minutes: ${ASTRASTORE_AUTH_RESET_TOKEN_TTL_MINUTES:30}
+    reset-link-base-url: ${ASTRASTORE_AUTH_RESET_LINK_BASE_URL:http://localhost:3000/reset-password}
+
 # Actuator & Observability
 management:
   endpoints:
@@ -71,3 +88,21 @@ logging:
     com.astrastore: DEBUG
     org.springframework.security: INFO
     org.hibernate.SQL: WARN
+
+# ============================================================
+#  Production profile overrides
+# ============================================================
+---
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+astrastore:
+  auth:
+    # Deliberately a literal and not an env-var placeholder: a reset token in
+    # an HTTP response is a live credential for an account whose address the
+    # caller merely typed. Production must not be able to enable it by
+    # setting a variable in a compose file.
+    expose-reset-token: false
+

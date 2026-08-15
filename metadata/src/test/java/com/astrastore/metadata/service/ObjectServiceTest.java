@@ -8,6 +8,7 @@ import com.astrastore.metadata.entity.ReplicationStatus;
 import com.astrastore.metadata.exception.ObjectNotFoundException;
 import com.astrastore.metadata.repository.ChunkLocationRepository;
 import com.astrastore.metadata.repository.ObjectRepository;
+import com.astrastore.metadata.repository.ObjectStarRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -42,11 +43,18 @@ class ObjectServiceTest {
     @Mock
     private ChunkLocationRepository chunkLocationRepository;
 
+    @Mock
+    private ObjectStarRepository objectStarRepository;
+
+    @Mock
+    private ChunkCleanupPublisher chunkCleanupPublisher;
+
     private ObjectService objectService;
 
     @BeforeEach
     void setUp() {
-        objectService = new ObjectService(objectRepository, chunkLocationRepository);
+        objectService = new ObjectService(
+                objectRepository, chunkLocationRepository, objectStarRepository, chunkCleanupPublisher);
     }
 
     @Test

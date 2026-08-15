@@ -6,15 +6,20 @@
 package com.astrastore.auth.controller;
 
 import com.astrastore.auth.dto.AuthResponse;
+import com.astrastore.auth.dto.ForgotPasswordRequest;
+import com.astrastore.auth.dto.ForgotPasswordResponse;
 import com.astrastore.auth.dto.LoginRequest;
+import com.astrastore.auth.dto.MessageResponse;
 import com.astrastore.auth.dto.RefreshTokenRequest;
 import com.astrastore.auth.dto.RegisterRequest;
+import com.astrastore.auth.dto.ResetPasswordRequest;
 import com.astrastore.auth.entity.AuditAction;
 import com.astrastore.auth.entity.User;
 import com.astrastore.auth.exception.AuthException;
 import com.astrastore.auth.repository.UserRepository;
 import com.astrastore.auth.security.JwtService;
 import com.astrastore.auth.service.AuditLogService;
+import com.astrastore.auth.service.PasswordResetService;
 import com.astrastore.auth.service.RefreshTokenService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -42,6 +47,15 @@ public class AuthController {
     private final AuthenticationManager authenticationManager;
     private final RefreshTokenService refreshTokenService;
     private final AuditLogService auditLogService;
+    private final PasswordResetService passwordResetService;
+
+    /**
+     * Identical for a registered address and an unknown one. The whole point
+     * of the endpoint is that the answer carries no information about whether
+     * the account exists.
+     */
+    private static final String FORGOT_PASSWORD_MESSAGE =
+            "If that address belongs to an account, a password reset link has been sent to it.";
 
     @PostMapping("/register")
     public ResponseEntity<?> register(
@@ -170,5 +184,41 @@ public class AuthController {
             log.error("Logout error: {}", e.getMessage(), e);
             throw e;
         }
+    }
+
+    /**
+     * Starts the forgotten-password flow.
+     *
+     * <p>Always 200, always the same body. Answering 404 for an unknown
+     * address — or even taking a visibly different path — would turn this
+     * unauthenticated endpoint into a way to test whether somebody has an
+     * account here.
+     */
+    @PostMapping("/forgot-password")
+    public ResponseEntity<ForgotPasswordResponse> forgotPassword(
+            @Valid @RequestBody ForgotPasswordRequest request,
+            HttpServletRequest httpRequest) {
+
+        java.util.Optional<String> rawToken =
+                passwordResetService.requestReset(request.email(), httpRequest);
+
+        if (passwordResetService.exposesToken() && rawToken.isPresent()) {
+            return ResponseEntity.ok(
+                    ForgotPasswordResponse.withToken(FORGOT_PASSWORD_MESSAGE, rawToken.get()));
+        }
+        return ResponseEntity.ok(ForgotPasswordResponse.of(FORGOT_PASSWORD_MESSAGE));
+    }
+
+    /**
+     * Completes the flow by spending a reset token.
+     */
+    @PostMapping("/reset-password")
+    public ResponseEntity<MessageResponse> resetPassword(
+            @Valid @RequestBody ResetPasswordRequest request,
+            HttpServletRequest httpRequest) {
+
+        passwordResetService.completeReset(request.token(), request.newPassword(), httpRequest);
+        return ResponseEntity.ok(new MessageResponse(
+                "Your password has been reset. All existing sessions have been signed out."));
     }
 }

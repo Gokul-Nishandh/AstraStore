@@ -2,10 +2,6 @@ package com.astrastore.upload.service;
 
 import com.astrastore.shared.manifest.ChunkManifest;
 import com.astrastore.shared.manifest.ObjectManifest;
-import com.astrastore.upload.client.MetadataClient;
-import com.astrastore.upload.client.PlacementClient;
-import com.astrastore.upload.client.StorageNodeClient;
-import com.astrastore.upload.messaging.ReplicationEventPublisher;
 import com.astrastore.upload.model.UploadResult;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -31,22 +27,9 @@ class UploadOrchestratorTest {
     @Mock
     private ZeroMemoryEngine zeroMemoryEngine;
 
-    @Mock
-    private MetadataClient metadataClient;
-
-    @Mock
-    private PlacementClient placementClient;
-
-    @Mock
-    private StorageNodeClient storageNodeClient;
-
-    @Mock
-    private ReplicationEventPublisher replicationEventPublisher;
-
     @Test
     void handleUpload_returnsUploadResultFromManifest() throws Exception {
-        UploadOrchestrator orchestrator = new UploadOrchestrator(
-                zeroMemoryEngine, metadataClient, placementClient, storageNodeClient, replicationEventPublisher);
+        UploadOrchestrator orchestrator = new UploadOrchestrator(zeroMemoryEngine);
 
         ObjectManifest manifest = ObjectManifest.builder()
                 .objectId(OBJECT_ID.toString())
@@ -72,8 +55,7 @@ class UploadOrchestratorTest {
 
     @Test
     void handleUpload_returnsNullObjectIdWhenManifestHasNone() throws Exception {
-        UploadOrchestrator orchestrator = new UploadOrchestrator(
-                zeroMemoryEngine, metadataClient, placementClient, storageNodeClient, replicationEventPublisher);
+        UploadOrchestrator orchestrator = new UploadOrchestrator(zeroMemoryEngine);
 
         ObjectManifest manifest = ObjectManifest.builder()
                 .objectId(null)

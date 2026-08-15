@@ -26,4 +26,13 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long
     @Modifying
     @Query("DELETE FROM RefreshToken r WHERE r.expiresAt < :now")
     int deleteExpired(@Param("now") java.time.Instant now);
+
+    /**
+     * Hard-deletes every refresh token belonging to a user. Used when the
+     * account itself goes away — a revoked-but-present row would keep a
+     * dangling reference to an id that no longer resolves.
+     */
+    @Modifying
+    @Query("DELETE FROM RefreshToken r WHERE r.userId = :userId")
+    int deleteAllByUserId(@Param("userId") Long userId);
 }

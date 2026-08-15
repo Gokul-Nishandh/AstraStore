@@ -4,7 +4,7 @@ import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.io.FileSystemResource;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -16,21 +16,24 @@ import java.nio.file.Paths;
  * Creates 256 hexadecimal subdirectories (00-ff) for hash-based fan-out.
  */
 @Configuration
+@EnableScheduling
 @RequiredArgsConstructor
 @Slf4j
 public class StorageConfig {
 
-    private static final String STORAGE_ROOT = "/data/storage";
+    private final StorageNodeProperties properties;
 
     @PostConstruct
     public void initDirectoryFanOut() throws IOException {
+        Path root = getStorageRoot();
         for (int i = 0; i < 256; i++) {
             String hex = String.format("%02x", i);
-            Path dir = Paths.get(STORAGE_ROOT, hex);
+            Path dir = root.resolve(hex);
             Files.createDirectories(dir);
             log.debug("Created storage directory: {}", dir);
         }
-        log.info("Initialized {} hash directories under {}", 256, STORAGE_ROOT);
+        log.info("Initialized {} hash directories under {} — nodeId={}, capacityBytes={}",
+                256, root, properties.getId(), properties.getCapacityBytes());
     }
 
     /**
@@ -43,10 +46,10 @@ public class StorageConfig {
      */
     public Path getFinalPath(String chunkId) {
         String prefix = chunkId.substring(0, 2);
-        return Paths.get(STORAGE_ROOT, prefix, chunkId);
+        return getStorageRoot().resolve(prefix).resolve(chunkId);
     }
 
     public Path getStorageRoot() {
-        return Paths.get(STORAGE_ROOT);
+        return Paths.get(properties.getStorageRoot());
     }
 }

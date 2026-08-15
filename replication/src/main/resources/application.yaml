@@ -29,6 +29,16 @@ services:
   metadata-url: ${SERVICES_METADATA_URL:http://metadata:8084}
 
 astrastore:
+  # Copies kept per chunk, counting the primary. Must match the value the
+  # placement service uses to report capacity, or the logical-bytes estimate
+  # on the dashboard will disagree with what is actually on disk.
+  replication-factor: ${ASTRASTORE_REPLICATION_FACTOR:2}
+  internal:
+    # Shared secret presented to metadata's /internal/v1/** surface, which
+    # bypasses ownership checks. Must match the value metadata is given.
+    # Blank is refused at startup unless a dev/local/test profile is active,
+    # so a real deployment cannot come up unauthenticated.
+    service-token: ${ASTRA_INTERNAL_TOKEN:}
   placement:
     url: ${PLACEMENT_SERVICE_URL:http://placement:8085}
 
@@ -61,3 +71,4 @@ logging:
   level:
     com.astrastore: DEBUG
     org.springframework.kafka: INFO
+

@@ -57,7 +57,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                 UserDetails userDetails = userDetailsService.loadUserByUsername(username);
 
-                if (jwtService.isTokenValid(token, userDetails)) {
+                // A disabled account's outstanding access tokens must stop
+                // working immediately. Without this check an administrator
+                // could disable an account and the holder would keep full
+                // access until the token expired — up to 24 hours later.
+                if (!userDetails.isEnabled()) {
+                    log.warn("Rejected access token for disabled account: {}", username);
+                    filterChain.doFilter(request, response);
+                    return;
+                }
+
+                if (jwtService.isAccessTokenValid(token, userDetails)) {
                     UsernamePasswordAuthenticationToken authToken =
                             new UsernamePasswordAuthenticationToken(
                                     userDetails,

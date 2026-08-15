@@ -245,6 +245,8 @@ Client GET /api/v1/objects/{objectId}
 | `GET` | `/api/v1/objects/{objectId}` | download | Download object by ID |
 | `GET` | `/api/v1/buckets/{bucketId}/objects/{key}` | download | Download by bucket+key |
 | `DELETE` | `/api/v1/objects/{objectId}` | metadata | Soft-delete object |
+| `GET` | `/api/v1/admin/objects/{objectId}/chunks` | metadata | **ADMIN** — placement of each chunk of an object |
+| `GET` | `/api/v1/admin/chunks?nodeId=…` | metadata | **ADMIN** — chunks a node holds, paged. `nodeId` is repeatable: a node is recorded by base URL in `chunk_locations` and by short name in the placement registry |
 
 ### Internal APIs (service-to-service only, not gateway-exposed)
 

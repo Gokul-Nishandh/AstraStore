@@ -89,8 +89,7 @@ public class ApiKeyService {
             return Optional.empty();
         }
         String keyPrefix = rawKey.substring(0, 12) + "...";
-        List<ApiKey> candidates = apiKeyRepository.findAll().stream()
-                .filter(k -> k.getKeyPrefix().equals(keyPrefix))
+        List<ApiKey> candidates = apiKeyRepository.findByKeyPrefixAndRevokedFalse(keyPrefix).stream()
                 .filter(ApiKey::isValid)
                 .toList();
         for (ApiKey candidate : candidates) {

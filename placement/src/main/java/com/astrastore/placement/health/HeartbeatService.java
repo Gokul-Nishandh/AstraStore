@@ -108,10 +108,12 @@ public class HeartbeatService {
 
             stateMachine.onSuccess(node, response);
 
-            log.debug("Heartbeat success — node={}, diskFree={}B, diskTotal={}B",
+            log.debug("Heartbeat success — node={}, used={}B/{}B, chunks={}, hostDiskFree={}B",
                     node.getNodeId(),
-                    response.getDiskFreeBytes(),
-                    response.getDiskTotalBytes());
+                    response.getUsedBytes(),
+                    response.getCapacityBytes(),
+                    response.getChunkCount(),
+                    response.getHostDiskFreeBytes());
 
         } catch (ResourceAccessException e) {
             // Connection refused, socket timeout, hostname not found, etc.

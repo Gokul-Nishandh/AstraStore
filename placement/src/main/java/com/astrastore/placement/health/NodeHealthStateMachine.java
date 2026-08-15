@@ -60,16 +60,7 @@ public class NodeHealthStateMachine {
         node.getLastChecked().set(now);
         node.getLastSeen().set(now);
 
-        // Refresh disk metrics
-        if (response.getDiskTotalBytes() != null) {
-            node.getDiskTotalBytes().set(response.getDiskTotalBytes());
-        }
-        if (response.getDiskFreeBytes() != null) {
-            node.getDiskFreeBytes().set(response.getDiskFreeBytes());
-        }
-        if (response.getDiskUsedBytes() != null) {
-            node.getDiskUsedBytes().set(response.getDiskUsedBytes());
-        }
+        refreshCapacity(node, response);
 
         // Reset failure counter unconditionally
         node.getConsecutiveFailures().set(0);
@@ -150,6 +141,40 @@ public class NodeHealthStateMachine {
     // ----------------------------------------------------------------
     // Private helpers
     // ----------------------------------------------------------------
+
+    /**
+     * Copies the node's quota accounting out of the heartbeat payload.
+     *
+     * <p>Only quota figures are accepted. A node that reports nothing but the
+     * old host-filesystem fields leaves {@code capacityReported} false, so the
+     * cluster view reports its capacity as unknown instead of adding a shared
+     * host drive to the total — the defect this whole change exists to fix.
+     */
+    private void refreshCapacity(StorageNode node, HeartbeatResponse response) {
+        if (response.getHostDiskFreeBytes() != null) {
+            // Advisory only — never summed, never used for placement scoring.
+            node.getHostDiskFreeBytes().set(response.getHostDiskFreeBytes());
+        }
+
+        if (!response.hasCapacityData()) {
+            log.warn("Node {} answered without quota capacity — treating capacity as unknown", node.getNodeId());
+            return;
+        }
+
+        long capacity = Math.max(0L, response.getCapacityBytes());
+        long used = Math.max(0L, response.getUsedBytes());
+        long available = response.getAvailableBytes() != null
+                ? Math.max(0L, response.getAvailableBytes())
+                : Math.max(0L, capacity - used);
+
+        node.getCapacityBytes().set(capacity);
+        node.getUsedBytes().set(used);
+        node.getAvailableBytes().set(available);
+        if (response.getChunkCount() != null) {
+            node.getChunkCount().set(Math.max(0L, response.getChunkCount()));
+        }
+        node.getCapacityReported().set(true);
+    }
 
     /**
      * Atomically changes the node's state and emits a clear INFO log line

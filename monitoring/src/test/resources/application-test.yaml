@@ -1,0 +1,53 @@
+# ============================================================
+#  Monitoring Service — Test Profile
+#  Uses H2 in-memory DB instead of Postgres.
+#  Disables Kafka so the context loads without a broker.
+# ============================================================
+spring:
+  application:
+    name: monitoring-service-test
+
+  datasource:
+    url: jdbc:h2:mem:monitoringdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+        hbm2ddl:
+          create_namespaces: true
+
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration
+
+  kafka:
+    bootstrap-servers:
+
+management:
+  endpoints:
+    enabled-by-default: false
+
+# Deterministic signing secret for tests (>= 256 bits, as HS256 requires).
+jwt:
+  secret: astrastore_test_jwt_secret_key_that_is_long_enough_for_hs256
+
+astrastore:
+  monitoring:
+    # Long interval and a far-out initial delay: the sweep must not fire
+    # against unreachable hosts while a test is asserting on the tables.
+    probe-interval-ms: 3600000
+    probe-initial-delay-ms: 3600000
+    retention-interval-ms: 3600000
+    retention-initial-delay-ms: 3600000
+    targets:
+      - id: auth
+        display-name: Authentication
+        kind: service
+        base-url: http://localhost:18081

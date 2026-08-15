@@ -5,6 +5,36 @@ spring:
   application:
     name: monitoring-service
 
+  # PostgreSQL datasource. Shares the cluster's instance but owns the
+  # `monitoring` schema, so its high-volume sample table cannot collide with
+  # auth's or metadata's tables.
+  datasource:
+    url: jdbc:postgresql://${SPRING_DATASOURCE_HOST:localhost}:${SPRING_DATASOURCE_PORT:5432}/astrastore
+    username: ${SPRING_DATASOURCE_USERNAME:astrastore}
+    password: ${SPRING_DATASOURCE_PASSWORD:astrastore_secret}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      idle-timeout: 300000
+      connection-timeout: 20000
+
+  jpa:
+    hibernate:
+      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:update}
+    show-sql: ${SPRING_JPA_SHOW_SQL:false}
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+        hbm2ddl:
+          create_namespaces: true
+        jdbc:
+          # One sweep writes one row per target; batching turns eleven
+          # round trips per interval into one.
+          batch_size: 50
+        order_inserts: true
+
   # Kafka consumer for receiving metrics/alert events
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
@@ -16,8 +46,111 @@ spring:
       properties:
         spring.json.trusted.packages: "*"
 
+  # Never let Spring's default whitelabel/servlet error body escape: every
+  # failure is rendered by GlobalExceptionHandler as an ApiError envelope.
+  mvc:
+    throw-exception-if-no-handler-found: true
+  web:
+    resources:
+      add-mappings: false
+
 server:
   port: 8087
+  error:
+    include-message: never
+    include-stacktrace: never
+    include-binding-errors: never
+    include-exception: false
+    whitelabel:
+      enabled: false
+
+# JWT verification — the same signing secret every AstraStore service holds.
+# Must match auth/src/main/resources/application.yaml.
+jwt:
+  secret: ${JWT_SECRET:astrastore_jwt_secret_key_change_in_production_min_256_bits}
+
+astrastore:
+  monitoring:
+    probe-interval-ms: ${ASTRASTORE_MONITORING_PROBE_INTERVAL_MS:15000}
+    # Far below the interval: a target that accepts the connection and then
+    # stops answering must not hold the sweep open past the next tick.
+    probe-timeout-ms: 2000
+    probe-initial-delay-ms: 5000
+
+    # Consecutive results required before a transition is recorded. One
+    # dropped packet is not an outage, and an incident written for one stays
+    # in the history for good.
+    failure-threshold: 2
+    success-threshold: 2
+
+    # Samples are the raw material for sparklines and percentiles only;
+    # incidents are kept forever and are what answers "how long was it down".
+    retention-days: ${ASTRASTORE_MONITORING_RETENTION_DAYS:7}
+    retention-interval-ms: 3600000
+
+    # Floors below which a window's uptime percentage is withheld rather than
+    # computed. A cluster started five minutes ago has not earned a figure
+    # like "99.98% over 30 days", and a fabricated one is worse than none.
+    min-samples-for-uptime: 5
+    min-observed-seconds-for-uptime: 300
+
+    stale-after-intervals: 3
+    max-sparkline-buckets: 60
+    health-path: /actuator/health
+
+    # Docker Compose service names and container ports. Overridden in
+    # deployment by ASTRASTORE_MONITORING_TARGETS, which carries the same
+    # list in the compact `id|display name|base url` form.
+    targets:
+      - id: gateway
+        display-name: API Gateway
+        kind: gateway
+        base-url: http://api-gateway:8080
+      - id: auth
+        display-name: Authentication
+        kind: service
+        base-url: http://auth:8081
+      - id: upload
+        display-name: Upload
+        kind: service
+        base-url: http://upload:8082
+      - id: download
+        display-name: Download
+        kind: service
+        base-url: http://download:8083
+      - id: metadata
+        display-name: Metadata
+        kind: service
+        base-url: http://metadata:8084
+      - id: placement
+        display-name: Placement
+        kind: service
+        base-url: http://placement:8085
+      - id: replication
+        display-name: Replication
+        kind: service
+        base-url: http://replication:8086
+      # Self-probe. Worth the round trip: it distinguishes "the monitor is
+      # running but its own health is degraded" from a gap in the history,
+      # which a monitor that skips itself cannot tell apart.
+      - id: monitoring
+        display-name: Monitoring
+        kind: service
+        base-url: http://monitoring:8087
+      # All three nodes listen on 8088 inside the network; the differing host
+      # ports in docker-compose are irrelevant here.
+      - id: storage-node-1
+        display-name: Storage Node 1
+        kind: storage-node
+        base-url: http://storage-node-1:8088
+      - id: storage-node-2
+        display-name: Storage Node 2
+        kind: storage-node
+        base-url: http://storage-node-2:8088
+      - id: storage-node-3
+        display-name: Storage Node 3
+        kind: storage-node
+        base-url: http://storage-node-3:8088
 
 # Actuator & Observability
 management:
@@ -52,4 +185,5 @@ otel:
 logging:
   level:
     com.astrastore: DEBUG
+    org.hibernate.SQL: WARN
     org.springframework.kafka: INFO

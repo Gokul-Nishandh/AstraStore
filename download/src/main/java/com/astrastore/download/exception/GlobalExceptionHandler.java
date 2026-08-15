@@ -18,24 +18,43 @@ public class GlobalExceptionHandler {
 
     private final Tracer tracer;
 
+    /*
+     * Exception messages here carry internal service URLs, container hostnames
+     * and downstream response bodies — useful in a log, disqualifying in a
+     * response. Every handler below logs the detail and returns a sentence
+     * written for the person who triggered it.
+     */
+
     @ExceptionHandler(ChunkUnavailableException.class)
     public ResponseEntity<ErrorResponse> handleChunkUnavailable(ChunkUnavailableException ex) {
-        return buildResponse("BAD_GATEWAY", ex.getMessage(), HttpStatus.BAD_GATEWAY);
+        log.warn("Chunk unavailable", ex);
+        return buildResponse("BAD_GATEWAY",
+                "That file could not be read from storage. Please try again shortly.",
+                HttpStatus.BAD_GATEWAY);
     }
 
     @ExceptionHandler(ChecksumVerificationException.class)
     public ResponseEntity<ErrorResponse> handleChecksumVerification(ChecksumVerificationException ex) {
-        return buildResponse("UNPROCESSABLE_ENTITY", ex.getMessage(), HttpStatus.UNPROCESSABLE_ENTITY);
+        log.error("Checksum mismatch on read", ex);
+        return buildResponse("UNPROCESSABLE_ENTITY",
+                "That file failed its integrity check and was not returned.",
+                HttpStatus.UNPROCESSABLE_ENTITY);
     }
 
     @ExceptionHandler(ObjectNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleObjectNotFound(ObjectNotFoundException ex) {
-        return buildResponse("NOT_FOUND", ex.getMessage(), HttpStatus.NOT_FOUND);
+        log.info("Object not found: {}", ex.getMessage());
+        return buildResponse("NOT_FOUND",
+                "We could not find that object.",
+                HttpStatus.NOT_FOUND);
     }
 
     @ExceptionHandler(MetadataUnavailableException.class)
     public ResponseEntity<ErrorResponse> handleMetadataUnavailable(MetadataUnavailableException ex) {
-        return buildResponse("SERVICE_UNAVAILABLE", ex.getMessage(), HttpStatus.SERVICE_UNAVAILABLE);
+        log.error("Metadata service call failed", ex);
+        return buildResponse("SERVICE_UNAVAILABLE",
+                "AstraStore is temporarily unavailable. Please try again in a moment.",
+                HttpStatus.SERVICE_UNAVAILABLE);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -51,7 +70,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleGeneric(Exception ex) {
         log.error("Unhandled exception in download service", ex);
         return buildResponse("INTERNAL_ERROR",
-                ex.getMessage() != null ? ex.getMessage() : "Internal server error",
+                "Something went wrong on our side. Please try again.",
                 HttpStatus.INTERNAL_SERVER_ERROR);
     }
 

@@ -57,7 +57,10 @@ public class PlacementStrategyService implements PlacementStrategy {
      * - Health = 1.0 if HEALTHY, 0.5 if DEGRADED
      */
     private double calculateScore(StorageNode node) {
-        double capacityScore = node.getDiskFreeRatio();
+        // Free share of the node's own quota — meaningful now that capacity is
+        // per-node, rather than the identical host-disk ratio every container
+        // used to report (which made this term a constant).
+        double capacityScore = node.getFreeRatio();
         
         // Inverse load: fewer connections = higher score
         double inverseLoadScore = 1.0 / (1.0 + node.getActiveConnections().get());

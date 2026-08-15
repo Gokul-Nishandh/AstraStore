@@ -1,119 +1,581 @@
+# ============================================================
+#  API Gateway — routing, rate limiting, CORS
+#
+#  Route order is significant: Spring Cloud Gateway takes the
+#  first predicate that matches, so the narrow routes below are
+#  deliberately declared ahead of the broad ones.
+# ============================================================
 spring:
   application:
     name: api-gateway
 
+  # Backs RequestRateLimiter and the API-key cache. Lettuce connects lazily,
+  # so a missing Redis degrades the edge rather than stopping it booting.
+  data:
+    redis:
+      host: ${SPRING_REDIS_HOST:localhost}
+      port: ${SPRING_REDIS_PORT:6379}
+      timeout: 2000ms
+
   cloud:
     gateway:
+      # A downstream that sets its own CORS headers would otherwise stack a
+      # second value onto ours, which browsers reject outright.
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_FIRST
+
       routes:
-        # Auth — routed by Docker Compose DNS name inside the astrastore network
+        # ----------------------------------------------------------
+        #  Auth — auth:8081
+        #  Split into four routes purely to attach different limiters;
+        #  the generic /api/auth/** route below covers everything else,
+        #  including the account, admin and audit sub-paths.
+        # ----------------------------------------------------------
+        - id: auth-login-route
+          uri: http://auth:8081
+          predicates:
+            - Path=/api/auth/login
+            - Method=POST
+          filters:
+            # Guessing a password is the attack this endpoint exists to
+            # invite, so it gets the strictest bucket in the system.
+            - name: RequestRateLimiter
+              args:
+                rate-limiter: "#{@authRateLimiter}"
+                key-resolver: "#{@astraRateLimitKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: authCircuitBreaker
+                fallbackUri: forward:/__astra/unavailable
+
+        - id: auth-password-route
+          uri: http://auth:8081
+          predicates:
+            - Path=/api/auth/password/**
+            - Method=POST
+          filters:
+            # Same limiter as login: a reset token is guessable in exactly
+            # the same way a password is.
+            - name: RequestRateLimiter
+              args:
+                rate-limiter: "#{@authRateLimiter}"
+                key-resolver: "#{@astraRateLimitKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: authCircuitBreaker
+                fallbackUri: forward:/__astra/unavailable
+
+        - id: auth-register-route
+          uri: http://auth:8081
+          predicates:
+            - Path=/api/auth/register
+            - Method=POST
+          filters:
+            - name: RequestRateLimiter
+              args:
+                rate-limiter: "#{@registrationRateLimiter}"
+                key-resolver: "#{@astraRateLimitKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: authCircuitBreaker
+                fallbackUri: forward:/__astra/unavailable
+
         - id: auth-route
           uri: http://auth:8081
           predicates:
             - Path=/api/auth/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                rate-limiter: "#{@defaultRateLimiter}"
+                key-resolver: "#{@astraRateLimitKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: authCircuitBreaker
+                fallbackUri: forward:/__astra/unavailable
 
-        # Upload Service (PUT object by bucket/key) - must be before metadata to take precedence
+        # ----------------------------------------------------------
+        #  Object bytes and object metadata
+        #
+        #  The upload, download and metadata services all publish
+        #  handlers under /api/v1/objects and /api/v1/buckets, and some
+        #  of those handlers collide on path alone. Everything in this
+        #  block is ordered narrowest-first; moving a route up or down
+        #  changes which service answers.
+        # ----------------------------------------------------------
+
+        # Ahead of every bucket route: {*key} would otherwise be swallowed
+        # by the bucket metadata route, which also matches this depth.
         - id: upload-route
           uri: http://upload:8082
           predicates:
             - Path=/api/v1/buckets/{bucketId}/objects/{*key}
             - Method=PUT
+          filters:
+            - name: RequestRateLimiter
+              args:
+                rate-limiter: "#{@transferRateLimiter}"
+                key-resolver: "#{@astraRateLimitKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: uploadCircuitBreaker
+                fallbackUri: forward:/__astra/unavailable
 
-        # Download Service (GET/HEAD object by objectId)
+        # "recent" is a literal, not an object id — without this route the
+        # download service is asked for an object called "recent".
+        - id: object-recent-route
+          uri: http://metadata:8084
+          predicates:
+            - Path=/api/v1/objects/recent
+            - Method=GET
+          filters:
+            - name: RequestRateLimiter
+              args:
+                rate-limiter: "#{@defaultRateLimiter}"
+                key-resolver: "#{@astraRateLimitKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: metadataCircuitBreaker
+                fallbackUri: forward:/__astra/unavailable
+
+        - id: object-star-route
+          uri: http://metadata:8084
+          predicates:
+            - Path=/api/v1/objects/{objectId}/star
+            - Method=PUT,DELETE
+          filters:
+            - name: RequestRateLimiter
+              args:
+                rate-limiter: "#{@defaultRateLimiter}"
+                key-resolver: "#{@astraRateLimitKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: metadataCircuitBreaker
+                fallbackUri: forward:/__astra/unavailable
+
+        - id: object-restore-route
+          uri: http://metadata:8084
+          predicates:
+            - Path=/api/v1/objects/{objectId}/restore
+            - Method=POST
+          filters:
+            - name: RequestRateLimiter
+              args:
+                rate-limiter: "#{@defaultRateLimiter}"
+                key-resolver: "#{@astraRateLimitKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: metadataCircuitBreaker
+                fallbackUri: forward:/__astra/unavailable
+
+        # Permanent delete is two segments deep, so it never reaches the
+        # single-segment soft-delete route further down.
+        - id: object-permanent-delete-route
+          uri: http://metadata:8084
+          predicates:
+            - Path=/api/v1/objects/{objectId}/permanent
+            - Method=DELETE
+          filters:
+            - name: RequestRateLimiter
+              args:
+                rate-limiter: "#{@defaultRateLimiter}"
+                key-resolver: "#{@astraRateLimitKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: metadataCircuitBreaker
+                fallbackUri: forward:/__astra/unavailable
+
+        # GET /api/v1/objects/{id} means two different things: the metadata
+        # service returns the record, the download service returns the bytes.
+        # Only the Accept header separates them, and only an API client asks
+        # for JSON — a browser, the CLI and all three SDKs send */* or nothing
+        # when they want the file. Without this, every metadata lookup has to
+        # bypass the gateway and talk to metadata:8084 directly.
+        - id: object-detail-route
+          uri: http://metadata:8084
+          predicates:
+            - Path=/api/v1/objects/{objectId}
+            - Method=GET
+            - Header=Accept, application/json.*
+          filters:
+            - name: RequestRateLimiter
+              args:
+                rate-limiter: "#{@defaultRateLimiter}"
+                key-resolver: "#{@astraRateLimitKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: metadataCircuitBreaker
+                fallbackUri: forward:/__astra/unavailable
+
         - id: download-by-id-route
           uri: http://download:8083
           predicates:
             - Path=/api/v1/objects/{objectId}
             - Method=GET,HEAD
+          filters:
+            - name: RequestRateLimiter
+              args:
+                rate-limiter: "#{@transferRateLimiter}"
+                key-resolver: "#{@astraRateLimitKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: downloadCircuitBreaker
+                fallbackUri: forward:/__astra/unavailable
 
-        # Object DELETE -> metadata service (soft-delete)
+        # Deleting an object is a metadata operation (soft delete); the
+        # download service has no DELETE handler at this path at all.
         - id: object-delete-route
           uri: http://metadata:8084
           predicates:
             - Path=/api/v1/objects/{objectId}
             - Method=DELETE
+          filters:
+            - name: RequestRateLimiter
+              args:
+                rate-limiter: "#{@defaultRateLimiter}"
+                key-resolver: "#{@astraRateLimitKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: metadataCircuitBreaker
+                fallbackUri: forward:/__astra/unavailable
 
-        # Download Service (GET/HEAD object by bucket/key - non-greedy match)
+        # {key:.+} is one segment on purpose. A multi-segment {*key} would
+        # also match /api/v1/buckets/{id}/objects, stealing the object
+        # listing from the metadata service below.
         - id: download-by-key-route
           uri: http://download:8083
           predicates:
             - Path=/api/v1/buckets/{bucketId}/objects/{key:.+}
             - Method=GET
-
-        # Download (legacy path)
-        - id: download-route
-          uri: http://download:8083
-          predicates:
-            - Path=/api/download/**
           filters:
-            - RewritePath=/api/download/(?<segment>.*), /$\{segment}
+            - name: RequestRateLimiter
+              args:
+                rate-limiter: "#{@transferRateLimiter}"
+                key-resolver: "#{@astraRateLimitKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: downloadCircuitBreaker
+                fallbackUri: forward:/__astra/unavailable
 
-        # Metadata (Buckets - POST for create, GET for list, DELETE for remove)
-        - id: bucket-metadata-write-route
+        # ----------------------------------------------------------
+        #  Metadata — metadata:8084
+        # ----------------------------------------------------------
+        - id: bucket-create-route
           uri: http://metadata:8084
           predicates:
             - Path=/api/v1/buckets
             - Method=POST
-        - id: bucket-metadata-list-route
+          filters:
+            - name: RequestRateLimiter
+              args:
+                rate-limiter: "#{@defaultRateLimiter}"
+                key-resolver: "#{@astraRateLimitKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: metadataCircuitBreaker
+                fallbackUri: forward:/__astra/unavailable
+
+        - id: bucket-metadata-route
           uri: http://metadata:8084
           predicates:
             - Path=/api/v1/buckets/**
             - Method=GET,DELETE
+          filters:
+            - name: RequestRateLimiter
+              args:
+                rate-limiter: "#{@defaultRateLimiter}"
+                key-resolver: "#{@astraRateLimitKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: metadataCircuitBreaker
+                fallbackUri: forward:/__astra/unavailable
+
         - id: object-metadata-route
           uri: http://metadata:8084
           predicates:
             - Path=/api/v1/objects/**
             - Method=GET
+          filters:
+            - name: RequestRateLimiter
+              args:
+                rate-limiter: "#{@defaultRateLimiter}"
+                key-resolver: "#{@astraRateLimitKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: metadataCircuitBreaker
+                fallbackUri: forward:/__astra/unavailable
 
-        # Placement
-        - id: placement-route
+        - id: starred-route
+          uri: http://metadata:8084
+          predicates:
+            - Path=/api/v1/starred/**
+            - Method=GET
+          filters:
+            - name: RequestRateLimiter
+              args:
+                rate-limiter: "#{@defaultRateLimiter}"
+                key-resolver: "#{@astraRateLimitKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: metadataCircuitBreaker
+                fallbackUri: forward:/__astra/unavailable
+
+        - id: trash-route
+          uri: http://metadata:8084
+          predicates:
+            - Path=/api/v1/trash/**
+            - Method=GET,POST
+          filters:
+            - name: RequestRateLimiter
+              args:
+                rate-limiter: "#{@defaultRateLimiter}"
+                key-resolver: "#{@astraRateLimitKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: metadataCircuitBreaker
+                fallbackUri: forward:/__astra/unavailable
+
+        - id: stats-route
+          uri: http://metadata:8084
+          predicates:
+            - Path=/api/v1/stats/**
+            - Method=GET
+          filters:
+            - name: RequestRateLimiter
+              args:
+                rate-limiter: "#{@defaultRateLimiter}"
+                key-resolver: "#{@astraRateLimitKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: metadataCircuitBreaker
+                fallbackUri: forward:/__astra/unavailable
+
+        # Chunk placement, for the operations console. Metadata owns the
+        # chunk_locations table, so these answer from metadata:8084 — but
+        # they sit under /api/v1/admin, and `admin-route` further down claims
+        # that whole prefix for the replication service. These two must stay
+        # ahead of it. Both are ADMIN-only, enforced by @PreAuthorize on
+        # AdminChunkController; the gateway routes, it does not authorise.
+        - id: admin-node-chunks-route
+          uri: http://metadata:8084
+          predicates:
+            - Path=/api/v1/admin/chunks
+            - Method=GET
+          filters:
+            - name: RequestRateLimiter
+              args:
+                rate-limiter: "#{@defaultRateLimiter}"
+                key-resolver: "#{@astraRateLimitKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: metadataCircuitBreaker
+                fallbackUri: forward:/__astra/unavailable
+
+        - id: admin-object-chunks-route
+          uri: http://metadata:8084
+          predicates:
+            - Path=/api/v1/admin/objects/{objectId}/chunks
+            - Method=GET
+          filters:
+            - name: RequestRateLimiter
+              args:
+                rate-limiter: "#{@defaultRateLimiter}"
+                key-resolver: "#{@astraRateLimitKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: metadataCircuitBreaker
+                fallbackUri: forward:/__astra/unavailable
+
+        # ----------------------------------------------------------
+        #  Placement — placement:8085
+        # ----------------------------------------------------------
+        - id: cluster-route
+          uri: http://placement:8085
+          predicates:
+            - Path=/api/v1/cluster/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                rate-limiter: "#{@defaultRateLimiter}"
+                key-resolver: "#{@astraRateLimitKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: placementCircuitBreaker
+                fallbackUri: forward:/__astra/unavailable
+
+        - id: placement-v1-route
+          uri: http://placement:8085
+          predicates:
+            - Path=/api/v1/placement/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                rate-limiter: "#{@defaultRateLimiter}"
+                key-resolver: "#{@astraRateLimitKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: placementCircuitBreaker
+                fallbackUri: forward:/__astra/unavailable
+
+        # Legacy alias. It rewrites onto the /api/v1 prefix rather than onto
+        # the service root, which is what stops /api/placement/actuator/env
+        # and /api/placement/internal/... from being addressable at all.
+        - id: placement-legacy-route
           uri: http://placement:8085
           predicates:
             - Path=/api/placement/**
           filters:
-            - RewritePath=/api/placement/(?<segment>.*), /$\{segment}
-        # Replication
-        - id: replication-route
+            - RewritePath=/api/placement/(?<segment>.*), /api/v1/placement/$\{segment}
+            - name: RequestRateLimiter
+              args:
+                rate-limiter: "#{@defaultRateLimiter}"
+                key-resolver: "#{@astraRateLimitKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: placementCircuitBreaker
+                fallbackUri: forward:/__astra/unavailable
+
+        # ----------------------------------------------------------
+        #  Replication — replication:8086
+        # ----------------------------------------------------------
+        # Catch-all for /api/v1/admin. Anything under that prefix that is NOT
+        # replication's — see the two chunk-placement routes in the metadata
+        # block above — has to be declared before this one.
+        - id: admin-route
+          uri: http://replication:8086
+          predicates:
+            - Path=/api/v1/admin/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                rate-limiter: "#{@defaultRateLimiter}"
+                key-resolver: "#{@astraRateLimitKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: replicationCircuitBreaker
+                fallbackUri: forward:/__astra/unavailable
+
+        - id: replication-legacy-route
           uri: http://replication:8086
           predicates:
             - Path=/api/replication/**
           filters:
-            - RewritePath=/api/replication/(?<segment>.*), /$\{segment}
-        # Monitoring
+            - RewritePath=/api/replication/(?<segment>.*), /api/v1/admin/$\{segment}
+            - name: RequestRateLimiter
+              args:
+                rate-limiter: "#{@defaultRateLimiter}"
+                key-resolver: "#{@astraRateLimitKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: replicationCircuitBreaker
+                fallbackUri: forward:/__astra/unavailable
+
+        # ----------------------------------------------------------
+        #  Download legacy alias — download:8083
+        # ----------------------------------------------------------
+        - id: download-legacy-route
+          uri: http://download:8083
+          predicates:
+            - Path=/api/download/**
+          filters:
+            - RewritePath=/api/download/(?<segment>.*), /api/v1/$\{segment}
+            - name: RequestRateLimiter
+              args:
+                rate-limiter: "#{@transferRateLimiter}"
+                key-resolver: "#{@astraRateLimitKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: downloadCircuitBreaker
+                fallbackUri: forward:/__astra/unavailable
+
+        # ----------------------------------------------------------
+        #  Monitoring — monitoring:8087
+        # ----------------------------------------------------------
+        # The monitoring controllers are mapped at /api/v1/monitoring
+        # already, so this route proxies the path through unchanged.
         - id: monitoring-route
+          uri: http://monitoring:8087
+          predicates:
+            - Path=/api/v1/monitoring/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                rate-limiter: "#{@defaultRateLimiter}"
+                key-resolver: "#{@astraRateLimitKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: monitoringCircuitBreaker
+                fallbackUri: forward:/__astra/unavailable
+
+        - id: monitoring-legacy-route
           uri: http://monitoring:8087
           predicates:
             - Path=/api/monitoring/**
           filters:
-            - RewritePath=/api/monitoring/(?<segment>.*), /$\{segment}
+            - RewritePath=/api/monitoring/(?<segment>.*), /api/v1/monitoring/$\{segment}
+            - name: RequestRateLimiter
+              args:
+                rate-limiter: "#{@defaultRateLimiter}"
+                key-resolver: "#{@astraRateLimitKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: monitoringCircuitBreaker
+                fallbackUri: forward:/__astra/unavailable
 
-      # Enable HTTP request metrics for Prometheus
+        # The dashboard's status page polls one path per service. Monitoring
+        # already probes every target and owns the availability history, so
+        # this hands the question to it instead of the gateway fanning out to
+        # eleven actuator endpoints and inventing a second answer.
+        - id: service-health-route
+          uri: http://monitoring:8087
+          predicates:
+            - Path=/health/{serviceId}
+            - Method=GET
+          filters:
+            - RewritePath=/health/(?<serviceId>[^/]+), /api/v1/monitoring/health/$\{serviceId}
+            - name: RequestRateLimiter
+              args:
+                rate-limiter: "#{@defaultRateLimiter}"
+                key-resolver: "#{@astraRateLimitKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: monitoringCircuitBreaker
+                fallbackUri: forward:/__astra/unavailable
+
       metrics:
         enabled: true
 
-      # Global CORS — allow Grafana / Jaeger UI to query actuator endpoints
-      globalcors:
-        corsConfigurations:
-          "[/**]":
-            allowedOrigins: "*"
-            allowedMethods:
-              - GET
-              - POST
-              - PUT
-              - DELETE
-              - OPTIONS
-            allowedHeaders: "*"
+astrastore:
+  gateway:
+    # Browsers refuse "*" together with credentials, and the dashboard is
+    # about to be public, so the list is explicit. Override in production
+    # with ASTRASTORE_GATEWAY_ALLOWED_ORIGINS.
+    allowed-origins: ${ASTRASTORE_GATEWAY_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
+
+# Verifies access tokens minted by the auth service, and signs the short-lived
+# token the gateway hands downstream on behalf of an API-key caller. Must be
+# the same value the auth service uses or every request fails to verify.
+jwt:
+  secret: ${JWT_SECRET:astrastore_jwt_secret_key_change_in_production_min_256_bits}
 
 server:
   port: 8080
+  # Netty would otherwise echo "reactor-http-nio" style detail on errors.
+  error:
+    include-message: never
+    include-stacktrace: never
+    include-binding-errors: never
 
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,gateway,prometheus
+        # The `gateway` endpoint lists every route's target URI. That is a map
+        # of the internal network, on a port published to the host.
+        include: health,info,prometheus
   endpoint:
     health:
-      show-details: always
+      show-details: never
   prometheus:
     metrics:
       export:
@@ -132,5 +594,6 @@ otel:
 
 logging:
   level:
-    org.springframework.cloud.gateway: DEBUG
-    org.springframework.cloud.gateway.route: INFO
+    # DEBUG here logs full request URIs and downstream hostnames on every
+    # call; useful when adding a route, far too loud to leave on.
+    org.springframework.cloud.gateway: INFO

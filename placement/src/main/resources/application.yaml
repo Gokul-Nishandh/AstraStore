@@ -68,6 +68,10 @@ astrastore:
         url: ${STORAGE_NODE_2_URL:http://storage-node-2:8088}
       - id: storage-node-3
         url: ${STORAGE_NODE_3_URL:http://storage-node-3:8088}
+    # Copies kept of every chunk. Storing 1 GB at factor 2 consumes 2 GB of
+    # cluster capacity, so this is what separates rawBytesStored from
+    # logicalBytesStored in GET /api/v1/cluster/status.
+    replication-factor: ${ASTRASTORE_REPLICATION_FACTOR:2}
     heartbeat:
       # How often to poll each node (ms)
       interval-ms: 10000

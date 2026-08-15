@@ -1,7 +1,10 @@
 package com.astrastore.download.client;
 
+import com.astrastore.download.config.CallerTokenInterceptor;
 import com.astrastore.download.exception.MetadataUnavailableException;
 import com.astrastore.download.exception.ObjectNotFoundException;
+import com.astrastore.shared.security.InternalServiceToken;
+import com.astrastore.shared.security.InternalServiceTokenInterceptor;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -28,8 +31,15 @@ public class MetadataClient {
 
     public MetadataClient(
             ObjectMapper objectMapper,
-            @Value("${services.metadata-url:http://localhost:8084}") String metadataServiceUrl) {
+            @Value("${services.metadata-url:http://localhost:8084}") String metadataServiceUrl,
+            InternalServiceToken serviceToken) {
         this.restTemplate = new RestTemplate();
+        // Two credentials, for two different surfaces. Chunk locations are a
+        // service-to-service lookup on /internal/**; object and bucket lookups
+        // go through the public API so metadata applies the caller's own
+        // ownership rules rather than download guessing at them.
+        this.restTemplate.getInterceptors().add(new InternalServiceTokenInterceptor(serviceToken));
+        this.restTemplate.getInterceptors().add(new CallerTokenInterceptor());
         this.objectMapper = objectMapper;
         this.metadataServiceUrl = metadataServiceUrl;
     }

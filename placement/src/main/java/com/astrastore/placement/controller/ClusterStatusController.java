@@ -1,8 +1,10 @@
 package com.astrastore.placement.controller;
 
+import com.astrastore.placement.model.ClusterCapacity;
 import com.astrastore.placement.model.NodeState;
 import com.astrastore.placement.model.StorageNode;
 import com.astrastore.placement.registry.NodeRegistry;
+import com.astrastore.placement.service.ClusterCapacityService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -19,18 +21,19 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * REST API for querying the real-time health of the storage cluster.
+ * REST API for querying the real-time health and capacity of the storage cluster.
  *
- * <p>Intended consumers:</p>
- * <ul>
- *   <li>Module 4 React Dashboard — polls {@code GET /api/v1/cluster/status}</li>
- *   <li>Ops engineers for ad-hoc diagnostics</li>
- *   <li>Prometheus (via a custom metric endpoint, added in Phase 2)</li>
- * </ul>
+ * <h2>Capacity reporting</h2>
+ * <p>This endpoint used to sum each node's {@code FileStore} total. Every
+ * node in a local stack is a container on the operator's single drive, so the
+ * "cluster" appeared three times larger than the machine it ran on, and its
+ * "used" figure tracked the operator's own files rather than anything
+ * AstraStore had stored.
  *
- * <p>All responses are plain {@link Map} objects to keep the controller
- * free of additional DTO classes for Phase 1. Dedicated response records
- * can be introduced in Phase 2 as the API stabilises.</p>
+ * <p>Totals are now built from per-node quotas and per-node real usage, and
+ * both the raw and the logical view of stored bytes are published so the
+ * replication cost is visible instead of hidden. Existing field names are
+ * preserved; the new fields sit alongside them.
  */
 @RestController
 @RequestMapping("/api/v1/cluster")
@@ -39,6 +42,7 @@ import java.util.stream.Collectors;
 public class ClusterStatusController {
 
     private final NodeRegistry nodeRegistry;
+    private final ClusterCapacityService capacityService;
 
     // ----------------------------------------------------------------
     // Endpoints
@@ -47,19 +51,28 @@ public class ClusterStatusController {
     /**
      * Returns an aggregated view of the entire cluster.
      *
-     * <p>Sample response:</p>
+     * <p>Sample response (3 nodes, 20 GiB quota each, replication factor 2):</p>
      * <pre>
      * {
      *   "totalNodes": 3,
-     *   "healthyNodes": 2,
-     *   "degradedNodes": 1,
+     *   "healthyNodes": 3,
+     *   "degradedNodes": 0,
      *   "downNodes": 0,
      *   "recoveringNodes": 0,
      *   "eligibleNodes": 3,
-     *   "totalDiskBytes": 322122547200,
-     *   "totalFreeBytes": 280000000000,
-     *   "clusterFreeRatio": 0.87,
-     *   "checkedAt": "2025-01-15T10:30:00Z",
+     *   "reportingNodes": 3,
+     *   "insufficientData": false,
+     *   "totalCapacityBytes": 64424509440,
+     *   "usedBytes": 8388608,
+     *   "availableBytes": 64416120832,
+     *   "usedRatio": 0.00013,
+     *   "totalChunkCount": 24,
+     *   "replicationFactor": 2,
+     *   "rawBytesStored": 8388608,
+     *   "logicalBytesStored": 4194304,
+     *   "logicalBytesAvailable": 32208060416,
+     *   "replicationOverheadBytes": 4194304,
+     *   "checkedAt": "2026-08-13T10:30:00Z",
      *   "nodes": [ ... ]
      * }
      * </pre>
@@ -67,6 +80,7 @@ public class ClusterStatusController {
     @GetMapping("/status")
     public ResponseEntity<Map<String, Object>> clusterStatus() {
         Collection<StorageNode> all = nodeRegistry.getAllNodes();
+        ClusterCapacity capacity = capacityService.current();
 
         long healthy    = countByState(all, NodeState.HEALTHY);
         long degraded   = countByState(all, NodeState.DEGRADED);
@@ -74,26 +88,47 @@ public class ClusterStatusController {
         long recovering = countByState(all, NodeState.RECOVERING);
         long eligible   = all.stream().filter(StorageNode::isEligibleForPlacement).count();
 
-        long totalDisk = all.stream().mapToLong(n -> n.getDiskTotalBytes().get()).sum();
-        long totalFree = all.stream().mapToLong(n -> n.getDiskFreeBytes().get()).sum();
-        double freeRatio = totalDisk == 0 ? 0.0 : (double) totalFree / totalDisk;
-
         List<Map<String, Object>> nodeViews = all.stream()
-                .map(this::toNodeView)
+                .map(ClusterStatusController::toNodeView)
                 .collect(Collectors.toList());
 
         Map<String, Object> response = new LinkedHashMap<>();
+        // --- Unchanged keys the dashboard already binds to ---------------
         response.put("totalNodes",       all.size());
         response.put("healthyNodes",     healthy);
         response.put("degradedNodes",    degraded);
         response.put("downNodes",        down);
         response.put("recoveringNodes",  recovering);
         response.put("eligibleNodes",    eligible);
-        response.put("totalDiskBytes",   totalDisk);
-        response.put("totalFreeBytes",   totalFree);
-        response.put("clusterFreeRatio", String.format("%.4f", freeRatio));
+
+        // --- Honest capacity ---------------------------------------------
+        response.put("reportingNodes",           capacity.reportingNodes());
+        // True when no node has reported a quota yet. Everything below is
+        // null in that case; it is never padded out with zeros.
+        response.put("insufficientData",         capacity.insufficientData());
+        response.put("totalCapacityBytes",       capacity.totalCapacityBytes());
+        response.put("usedBytes",                capacity.usedBytes());
+        response.put("availableBytes",           capacity.availableBytes());
+        response.put("usedRatio",                capacity.usedRatio());
+        response.put("totalChunkCount",          capacity.totalChunkCount());
+
+        // --- Replication economics ---------------------------------------
+        response.put("replicationFactor",        capacity.replicationFactor());
+        response.put("rawBytesStored",           capacity.rawBytesStored());
+        response.put("logicalBytesStored",       capacity.logicalBytesStored());
+        response.put("logicalBytesAvailable",    capacity.logicalBytesAvailable());
+        response.put("replicationOverheadBytes", capacity.replicationOverheadBytes());
+        // logicalBytesStored is derived from rawBytesStored and the configured
+        // factor, not measured per object. Flagged so the UI can label it.
+        response.put("logicalBytesIsEstimate",   true);
+
         response.put("checkedAt",        Instant.now().toString());
         response.put("nodes",            nodeViews);
+
+        // --- Deprecated aliases, now backed by quotas rather than host disks
+        response.put("totalDiskBytes",   orZero(capacity.totalCapacityBytes()));
+        response.put("totalFreeBytes",   orZero(capacity.availableBytes()));
+        response.put("clusterFreeRatio", freeRatio(capacity));
 
         return ResponseEntity.ok(response);
     }
@@ -120,7 +155,7 @@ public class ClusterStatusController {
     public ResponseEntity<List<Map<String, Object>>> eligibleNodes() {
         List<Map<String, Object>> eligible = nodeRegistry.getEligibleNodes()
                 .stream()
-                .map(this::toNodeView)
+                .map(ClusterStatusController::toNodeView)
                 .collect(Collectors.toList());
         return ResponseEntity.ok(eligible);
     }
@@ -130,23 +165,54 @@ public class ClusterStatusController {
     // ----------------------------------------------------------------
 
     /** Converts a {@link StorageNode} to a flat map for JSON serialisation. */
-    private Map<String, Object> toNodeView(StorageNode node) {
+    private static Map<String, Object> toNodeView(StorageNode node) {
+        boolean reported = node.getCapacityReported().get();
+
         Map<String, Object> view = new LinkedHashMap<>();
         view.put("nodeId",            node.getNodeId());
         view.put("baseUrl",           node.getBaseUrl());
         view.put("state",             node.getState().get().name());
-        view.put("lastSeen",          node.getLastSeen().get() != null ? node.getLastSeen().get().toString() : null);
-        view.put("lastChecked",       node.getLastChecked().get() != null ? node.getLastChecked().get().toString() : null);
+        view.put("lastSeen",          asIso(node.getLastSeen().get()));
+        view.put("lastChecked",       asIso(node.getLastChecked().get()));
         view.put("consecutiveFailures", node.getConsecutiveFailures().get());
-        view.put("diskTotalBytes",    node.getDiskTotalBytes().get());
-        view.put("diskFreeBytes",     node.getDiskFreeBytes().get());
-        view.put("diskUsedBytes",     node.getDiskUsedBytes().get());
-        view.put("diskFreeRatio",     String.format("%.4f", node.getDiskFreeRatio()));
+
+        // Null until the node has actually told us its quota — a nought here
+        // would read as "this node holds nothing", which is a different claim.
+        view.put("capacityReported",  reported);
+        view.put("capacityBytes",     reported ? node.getCapacityBytes().get() : null);
+        view.put("usedBytes",         reported ? node.getUsedBytes().get() : null);
+        view.put("availableBytes",    reported ? node.getAvailableBytes().get() : null);
+        view.put("chunkCount",        reported ? node.getChunkCount().get() : null);
+        view.put("usedRatio",         reported ? node.getUsedRatio() : null);
+
+        // Advisory only. Shared by every container on one host — do not sum.
+        long hostFree = node.getHostDiskFreeBytes().get();
+        view.put("hostDiskFreeBytes", hostFree > 0 ? hostFree : null);
+
         view.put("eligibleForPlacement", node.isEligibleForPlacement());
+
+        // Deprecated aliases, kept so existing clients keep parsing.
+        view.put("diskTotalBytes",    reported ? node.getCapacityBytes().get() : 0L);
+        view.put("diskFreeBytes",     reported ? node.getAvailableBytes().get() : 0L);
+        view.put("diskUsedBytes",     reported ? node.getUsedBytes().get() : 0L);
+        view.put("diskFreeRatio",     node.getFreeRatio());
         return view;
     }
 
-    private long countByState(Collection<StorageNode> nodes, NodeState state) {
+    private static String asIso(Instant instant) {
+        return instant != null ? instant.toString() : null;
+    }
+
+    private static long orZero(Long value) {
+        return value != null ? value : 0L;
+    }
+
+    private static double freeRatio(ClusterCapacity capacity) {
+        if (capacity.totalCapacityBytes() == null || capacity.totalCapacityBytes() == 0L) return 0.0;
+        return (double) capacity.availableBytes() / capacity.totalCapacityBytes();
+    }
+
+    private static long countByState(Collection<StorageNode> nodes, NodeState state) {
         return nodes.stream().filter(n -> n.getState().get() == state).count();
     }
 }
