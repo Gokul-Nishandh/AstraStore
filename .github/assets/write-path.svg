@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 500" width="1120" height="500" role="img" aria-label="Write path: a client PUT is authorised by the gateway, chunked by the upload service into 8 MiB pieces using an 8 KiB buffer, streamed to a primary storage node, recorded in metadata, then replicated to one more node by the replication service consuming a Kafka event.">
+  <rect x="0" y="0" width="1120" height="500" rx="14" fill="#191712"/>
+
+  <text x="50" y="46" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="15" font-weight="600" fill="#F0EDE6">Write path</text>
+  <text x="146" y="46" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="12" fill="#8A857B">one object → N chunks → 2 copies each</text>
+
+  <!-- ================= row 1 : synchronous path ================= -->
+  <g>
+    <rect x="50" y="88" width="120" height="68" rx="10" fill="#211F19" stroke="#35312A"/>
+    <text x="110" y="118" text-anchor="middle" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="12.5" font-weight="600" fill="#F0EDE6">Client</text>
+    <text x="110" y="136" text-anchor="middle" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="9.5" fill="#8A857B">CLI · SDK · console</text>
+  </g>
+
+  <g>
+    <rect x="230" y="88" width="160" height="68" rx="10" fill="#211F19" stroke="#35312A"/>
+    <text x="310" y="118" text-anchor="middle" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="12.5" font-weight="600" fill="#F0EDE6">API Gateway</text>
+    <text x="310" y="136" text-anchor="middle" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="9.5" fill="#8A857B">:8080 · JWT + rate limit</text>
+  </g>
+
+  <g>
+    <rect x="440" y="88" width="200" height="68" rx="10" fill="#211F19" stroke="#35312A"/>
+    <text x="540" y="114" text-anchor="middle" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="12.5" font-weight="600" fill="#F0EDE6">Upload</text>
+    <text x="540" y="131" text-anchor="middle" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="9.5" fill="#8A857B">:8082 · 8 KiB buffer, O(1) memory</text>
+    <text x="540" y="146" text-anchor="middle" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="9.5" fill="#D9915E">splits on 8 MiB boundary</text>
+  </g>
+
+  <g>
+    <rect x="720" y="88" width="170" height="68" rx="10" fill="#211F19" stroke="#4A4036"/>
+    <rect x="720" y="88" width="3" height="68" rx="1.5" fill="#D9915E"/>
+    <text x="805" y="118" text-anchor="middle" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="12.5" font-weight="600" fill="#F0EDE6">Storage node</text>
+    <text x="805" y="136" text-anchor="middle" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="9.5" fill="#D9915E">primary copy</text>
+  </g>
+
+  <!-- sync arrows (copper) -->
+  <g stroke="#D9915E" stroke-width="1.6" fill="#D9915E">
+    <line x1="170" y1="122" x2="221" y2="122"/><polygon points="221,118 221,126 229,122" stroke="none"/>
+    <line x1="390" y1="122" x2="431" y2="122"/><polygon points="431,118 431,126 439,122" stroke="none"/>
+    <line x1="640" y1="122" x2="711" y2="122"/><polygon points="711,118 711,126 719,122" stroke="none"/>
+  </g>
+  <g font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="9.5" fill="#B4AEA3" text-anchor="middle">
+    <text x="200" y="112">PUT object</text>
+    <text x="415" y="112">authorises</text>
+    <text x="680" y="112">chunk bytes</text>
+  </g>
+
+  <!-- ================= row 2 : asynchronous replication ================= -->
+  <g>
+    <rect x="460" y="248" width="160" height="68" rx="10" fill="#211F19" stroke="#35312A"/>
+    <text x="540" y="278" text-anchor="middle" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="12.5" font-weight="600" fill="#F0EDE6">Kafka</text>
+    <text x="540" y="296" text-anchor="middle" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="9" fill="#8A857B">astrastore.chunks.written</text>
+  </g>
+
+  <g>
+    <rect x="720" y="248" width="170" height="68" rx="10" fill="#211F19" stroke="#35312A"/>
+    <text x="805" y="278" text-anchor="middle" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="12.5" font-weight="600" fill="#F0EDE6">Replication</text>
+    <text x="805" y="296" text-anchor="middle" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="9.5" fill="#8A857B">:8086 · 10 streams/node</text>
+  </g>
+
+  <g>
+    <rect x="940" y="248" width="160" height="68" rx="10" fill="#211F19" stroke="#3E3830"/>
+    <rect x="940" y="248" width="3" height="68" rx="1.5" fill="#3FBB84"/>
+    <text x="1020" y="278" text-anchor="middle" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="12.5" font-weight="600" fill="#F0EDE6">Storage node</text>
+    <text x="1020" y="296" text-anchor="middle" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="9.5" fill="#3FBB84">replica copy</text>
+  </g>
+
+  <!-- async arrows (muted, dashed) -->
+  <g stroke="#8A857B" stroke-width="1.5" fill="#8A857B">
+    <line x1="540" y1="156" x2="540" y2="239" stroke-dasharray="5 4"/><polygon points="536,239 544,239 540,247" stroke="none"/>
+    <line x1="620" y1="282" x2="711" y2="282" stroke-dasharray="5 4"/><polygon points="711,278 711,286 719,282" stroke="none"/>
+    <line x1="890" y1="282" x2="931" y2="282" stroke-dasharray="5 4"/><polygon points="931,278 931,286 939,282" stroke="none"/>
+  </g>
+  <g font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="9.5" fill="#B4AEA3">
+    <text x="550" y="205" text-anchor="start">one event per chunk</text>
+    <text x="665" y="272" text-anchor="middle">consumes</text>
+    <text x="915" y="272" text-anchor="middle">P2P push</text>
+  </g>
+
+  <!-- ================= row 3 : metadata ================= -->
+  <g>
+    <rect x="300" y="396" width="700" height="58" rx="10" fill="#211F19" stroke="#35312A"/>
+    <text x="650" y="421" text-anchor="middle" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="12.5" font-weight="600" fill="#F0EDE6">Metadata · PostgreSQL</text>
+    <text x="650" y="438" text-anchor="middle" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="9.5" fill="#8A857B">:8084 — objects, chunk_locations (node_id, replica_node_id, replication_status)</text>
+  </g>
+
+  <g stroke="#8A857B" stroke-width="1.5" fill="#8A857B">
+    <path d="M 460 156 V 200 H 380 V 388" fill="none" stroke-dasharray="5 4"/><polygon points="376,388 384,388 380,396" stroke="none"/>
+    <line x1="805" y1="316" x2="805" y2="388" stroke-dasharray="5 4"/><polygon points="801,388 809,388 805,396" stroke="none"/>
+  </g>
+  <g font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="9.5" fill="#B4AEA3">
+    <text x="392" y="300" text-anchor="start">writes object +</text>
+    <text x="392" y="313" text-anchor="start">chunk rows</text>
+    <text x="815" y="358" text-anchor="start">sets replica node</text>
+    <text x="815" y="371" text-anchor="start">+ status</text>
+  </g>
+
+  <!-- ================= legend ================= -->
+  <g transform="translate(50,470)">
+    <line x1="0" y1="-4" x2="26" y2="-4" stroke="#D9915E" stroke-width="1.6"/>
+    <text x="34" y="0" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="9.5" fill="#8A857B">synchronous — the client waits</text>
+    <line x1="230" y1="-4" x2="256" y2="-4" stroke="#8A857B" stroke-width="1.5" stroke-dasharray="5 4"/>
+    <text x="264" y="0" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="9.5" fill="#8A857B">asynchronous — happens after the 200 returns</text>
+  </g>
+</svg>

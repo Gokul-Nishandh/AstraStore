@@ -154,14 +154,14 @@ account that should remain is the administrator.
    provider; Razorpay suits ₹ pricing.
 6. **`metadata` test coverage is 47% against a 70% gate** (SDD NFR-011). The
    gate is currently excluded from the build rather than met.
-7. **OAuth was removed** after it took down login, and the implementation is
-   **gone** — the commits that added and reverted it were squashed away before
-   they ever reached GitHub, so there is no history to recover it from.
-   Federated sign-in has to be rewritten from scratch. Whoever does: apply the
-   schema migration *before* deploying, because adding these columns to a live
-   `users` table is what broke login last time — `ALTER TABLE users ADD COLUMN
-   provider varchar(32) NOT NULL DEFAULT 'LOCAL', ADD COLUMN provider_id
-   varchar(191);`
+7. **Federated sign-in does not exist.** Every trace has been removed — the
+   `OAUTH_*` audit actions, the orphaned `oauth_login_codes` table and the
+   leftover `users.provider_id` column are all gone, and the implementation
+   itself was squashed away before it ever reached GitHub. It has to be
+   written from scratch. Whoever does: apply the schema migration *before*
+   deploying, because adding columns to a live `users` table is exactly what
+   took down login last time — `ALTER TABLE users ADD COLUMN provider
+   varchar(32) NOT NULL DEFAULT 'LOCAL', ADD COLUMN provider_id varchar(191);`
 8. **Almost nothing has been visually reviewed in a browser.** Every claim in
    this repo about the UI is backed by build, type check and API response —
    not by looking at it. The exceptions are the two chunk placement surfaces,

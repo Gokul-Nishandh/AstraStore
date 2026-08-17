@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 430" width="1120" height="430" role="img" aria-label="Chunk placement: a 20 MiB object splits into three 8 MiB chunks. Each chunk is written to one primary node and copied to exactly one other node, so every node ends up holding one primary and one replica and no chunk is ever stored twice on the same node.">
+  <rect x="0" y="0" width="1120" height="430" rx="14" fill="#191712"/>
+
+  <text x="50" y="46" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="15" font-weight="600" fill="#F0EDE6">Chunk placement</text>
+  <text x="212" y="46" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="12" fill="#8A857B">replication factor 2 — two copies, never on one node</text>
+
+  <!-- object split into chunks -->
+  <text x="50" y="112" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="11" fill="#8A857B">object</text>
+  <text x="50" y="127" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="10" fill="#6E695F">20 MiB</text>
+
+  <g>
+    <rect x="140" y="80" width="280" height="54" rx="8" fill="#211F19" stroke="#35312A"/>
+    <text x="280" y="103" text-anchor="middle" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="12.5" font-weight="600" fill="#F0EDE6">chunk 0</text>
+    <text x="280" y="120" text-anchor="middle" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="9.5" fill="#8A857B">8 MiB</text>
+
+    <rect x="428" y="80" width="280" height="54" rx="8" fill="#211F19" stroke="#35312A"/>
+    <text x="568" y="103" text-anchor="middle" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="12.5" font-weight="600" fill="#F0EDE6">chunk 1</text>
+    <text x="568" y="120" text-anchor="middle" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="9.5" fill="#8A857B">8 MiB</text>
+
+    <rect x="716" y="80" width="280" height="54" rx="8" fill="#211F19" stroke="#35312A"/>
+    <text x="856" y="103" text-anchor="middle" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="12.5" font-weight="600" fill="#F0EDE6">chunk 2</text>
+    <text x="856" y="120" text-anchor="middle" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="9.5" fill="#8A857B">4 MiB — remainder</text>
+  </g>
+
+  <!-- primary writes : straight down, copper -->
+  <g stroke="#D9915E" stroke-width="1.8" fill="#D9915E">
+    <line x1="280" y1="134" x2="280" y2="282"/><polygon points="276,282 284,282 280,290" stroke="none"/>
+    <line x1="568" y1="134" x2="568" y2="282"/><polygon points="564,282 572,282 568,290" stroke="none"/>
+    <line x1="856" y1="134" x2="856" y2="282"/><polygon points="852,282 860,282 856,290" stroke="none"/>
+  </g>
+
+  <!-- replica copies : orthogonal channels, green dashed -->
+  <g stroke="#3FBB84" stroke-width="1.5" fill="#3FBB84" stroke-dasharray="5 4">
+    <path d="M 320 134 V 178 H 620 V 282" fill="none"/>
+    <path d="M 608 134 V 202 H 908 V 282" fill="none"/>
+    <path d="M 896 134 V 226 H 220 V 282" fill="none"/>
+  </g>
+  <g fill="#3FBB84" stroke="none">
+    <polygon points="616,282 624,282 620,290"/>
+    <polygon points="904,282 912,282 908,290"/>
+    <polygon points="216,282 224,282 220,290"/>
+  </g>
+
+  <!-- storage nodes -->
+  <g>
+    <rect x="160" y="290" width="240" height="80" rx="10" fill="#211F19" stroke="#35312A"/>
+    <text x="280" y="318" text-anchor="middle" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="12.5" font-weight="600" fill="#F0EDE6">Storage node 1</text>
+    <text x="280" y="336" text-anchor="middle" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="9.5" fill="#8A857B">:8088</text>
+    <text x="280" y="356" text-anchor="middle" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="10" fill="#B4AEA3">chunk 0 primary · chunk 2 replica</text>
+
+    <rect x="448" y="290" width="240" height="80" rx="10" fill="#211F19" stroke="#35312A"/>
+    <text x="568" y="318" text-anchor="middle" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="12.5" font-weight="600" fill="#F0EDE6">Storage node 2</text>
+    <text x="568" y="336" text-anchor="middle" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="9.5" fill="#8A857B">:8089</text>
+    <text x="568" y="356" text-anchor="middle" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="10" fill="#B4AEA3">chunk 1 primary · chunk 0 replica</text>
+
+    <rect x="736" y="290" width="240" height="80" rx="10" fill="#211F19" stroke="#35312A"/>
+    <text x="856" y="318" text-anchor="middle" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="12.5" font-weight="600" fill="#F0EDE6">Storage node 3</text>
+    <text x="856" y="336" text-anchor="middle" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="9.5" fill="#8A857B">:8090</text>
+    <text x="856" y="356" text-anchor="middle" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="10" fill="#B4AEA3">chunk 2 primary · chunk 1 replica</text>
+  </g>
+
+  <!-- legend -->
+  <g transform="translate(50,404)">
+    <line x1="0" y1="-4" x2="26" y2="-4" stroke="#D9915E" stroke-width="1.8"/>
+    <text x="34" y="0" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="9.5" fill="#8A857B">primary write — upload streams the bytes here</text>
+    <line x1="330" y1="-4" x2="356" y2="-4" stroke="#3FBB84" stroke-width="1.5" stroke-dasharray="5 4"/>
+    <text x="364" y="0" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="9.5" fill="#8A857B">replica copy — replication pushes node-to-node afterwards</text>
+  </g>
+</svg>

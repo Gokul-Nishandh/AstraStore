@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 400" width="1120" height="400" role="img" aria-label="Self-healing loop: when a node goes down its chunks drop to a single copy. A scanner runs every 60 seconds, finds chunks below the replication factor, publishes recovery events to Kafka throttled to two per second, and the replication service pushes each chunk to a healthy node. The restored replica is recorded in metadata, so the chunk falls out of the next scan.">
+  <rect x="0" y="0" width="1120" height="400" rx="14" fill="#191712"/>
+
+  <text x="60" y="44" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="15" font-weight="600" fill="#F0EDE6">Self-healing loop</text>
+  <text x="232" y="44" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="12" fill="#8A857B">detects and repairs under-replicated chunks without an operator</text>
+
+  <!-- trigger -->
+  <g>
+    <rect x="60" y="64" width="420" height="42" rx="8" fill="#2A1E1A" stroke="#5C3A32"/>
+    <circle cx="82" cy="85" r="4" fill="#DC4B3E"/>
+    <text x="98" y="89" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="11" fill="#E8B4AC">A node goes DOWN — every chunk it held now has one copy</text>
+  </g>
+  <g stroke="#DC4B3E" stroke-width="1.5" fill="#DC4B3E">
+    <line x1="165" y1="106" x2="165" y2="132"/><polygon points="161,132 169,132 165,140" stroke="none"/>
+  </g>
+
+  <!-- pipeline -->
+  <g>
+    <rect x="60" y="140" width="210" height="76" rx="10" fill="#211F19" stroke="#35312A"/>
+    <text x="165" y="170" text-anchor="middle" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="12.5" font-weight="600" fill="#F0EDE6">Scanner</text>
+    <text x="165" y="188" text-anchor="middle" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="9.5" fill="#8A857B">every 60s</text>
+    <text x="165" y="204" text-anchor="middle" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="9.5" fill="#E0A73C">finds copies &lt; factor</text>
+
+    <rect x="350" y="140" width="190" height="76" rx="10" fill="#211F19" stroke="#35312A"/>
+    <text x="445" y="176" text-anchor="middle" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="12.5" font-weight="600" fill="#F0EDE6">Kafka</text>
+    <text x="445" y="194" text-anchor="middle" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="9" fill="#8A857B">recovery event</text>
+
+    <rect x="620" y="140" width="190" height="76" rx="10" fill="#211F19" stroke="#35312A"/>
+    <text x="715" y="176" text-anchor="middle" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="12.5" font-weight="600" fill="#F0EDE6">Replication</text>
+    <text x="715" y="194" text-anchor="middle" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="9.5" fill="#8A857B">picks a node without it</text>
+
+    <rect x="890" y="140" width="170" height="76" rx="10" fill="#211F19" stroke="#3E3830"/>
+    <rect x="890" y="140" width="3" height="76" rx="1.5" fill="#3FBB84"/>
+    <text x="975" y="176" text-anchor="middle" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="12.5" font-weight="600" fill="#F0EDE6">Healthy node</text>
+    <text x="975" y="194" text-anchor="middle" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="9.5" fill="#3FBB84">second copy restored</text>
+  </g>
+
+  <g stroke="#D9915E" stroke-width="1.6" fill="#D9915E">
+    <line x1="270" y1="178" x2="341" y2="178"/><polygon points="341,174 341,182 349,178" stroke="none"/>
+    <line x1="540" y1="178" x2="611" y2="178"/><polygon points="611,174 611,182 619,178" stroke="none"/>
+    <line x1="810" y1="178" x2="881" y2="178"/><polygon points="881,174 881,182 889,178" stroke="none"/>
+  </g>
+  <g font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="9.5" fill="#B4AEA3" text-anchor="middle">
+    <text x="310" y="168">throttled 2/sec</text>
+    <text x="575" y="168">consumes</text>
+    <text x="845" y="168">P2P push</text>
+  </g>
+
+  <!-- return path closing the loop -->
+  <g stroke="#8A857B" stroke-width="1.5" fill="none" stroke-dasharray="5 4">
+    <path d="M 975 216 V 300 H 165 V 224"/>
+  </g>
+  <polygon points="161,224 169,224 165,216" fill="#8A857B"/>
+  <text x="570" y="290" text-anchor="middle" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="9.5" fill="#B4AEA3">replica recorded in metadata — the chunk drops out of the next scan</text>
+
+  <text x="60" y="352" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="10.5" fill="#6E695F">The rate limit is the point: a failed node can strand thousands of chunks, and repairing them all at once would saturate the same</text>
+  <text x="60" y="368" font-family="'Segoe UI',Inter,system-ui,sans-serif" font-size="10.5" fill="#6E695F">network the live traffic needs.</text>
+</svg>

@@ -66,7 +66,14 @@ function useNavGroups(isAdmin: boolean): { label: string; items: NavItem[] }[] {
  * nobody has measured yet is worse than one that admits it does not know.
  */
 function ClusterPill() {
-  const { data } = useMonitoringSummary('24h', true)
+  /* The role gates the poll as well as the pill. Rendering nothing while a
+     15-second timer kept asking an admin-only endpoint left every non-admin
+     session generating a 403 in the console for as long as the tab was open,
+     and filled their own audit trail with refusals. */
+  const { isAdmin } = useAuth()
+  const { data } = useMonitoringSummary('24h', isAdmin)
+
+  if (!isAdmin) return null
 
   const down = data ? data.servicesDown : 0
   const tone = !data ? 'neutral' : down > 0 ? 'danger' : data.servicesDegraded > 0 ? 'warning' : 'success'
