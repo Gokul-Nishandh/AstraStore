@@ -204,13 +204,21 @@ async function decode<T>(res: Response): Promise<T> {
   return JSON.parse(text) as T
 }
 
+/**
+ * The one endpoint that must never trigger the refresh-on-401 retry below.
+ * A refresh that comes back 401 has already given its answer — the session is
+ * gone — and asking again with the same spent token just repeats it, costing
+ * a second request and a second red line in the console.
+ */
+const REFRESH_PATH = '/api/auth/refresh'
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res = await send(path, init, accessToken)
 
   // Only 401 means "this token is stale". A 403 is a genuine permission
   // decision — retrying it with a fresh token just repeats the refusal, and
   // the old code's retry-on-403 turned every forbidden action into two.
-  if (res.status === 401 && refreshToken) {
+  if (res.status === 401 && refreshToken && path !== REFRESH_PATH) {
     const renewed = await refreshAccessToken()
     if (renewed) {
       res = await send(path, init, renewed)

@@ -22,21 +22,6 @@ public enum AuditAction {
 
     LOGOUT,
 
-    // --- Federated sign-in (Google, GitHub) --------------------------------
-    /** A returning user signed in through an external provider. */
-    OAUTH_SIGN_IN,
-    /** A brand-new account was created from a provider's verified identity. */
-    OAUTH_ACCOUNT_CREATED,
-    /**
-     * A provider was attached to an account that already existed here. The
-     * single most security-relevant event in the OAuth flow — it is the one
-     * that grants a new credential over an existing account — so it is
-     * recorded with the address and the provider in the detail.
-     */
-    OAUTH_ACCOUNT_LINKED,
-    /** A provider round-trip that did not end in a session. */
-    OAUTH_LOGIN_FAILED,
-
     REFRESH_TOKEN_SUCCESS,
     REFRESH_TOKEN_FAILED,
 
